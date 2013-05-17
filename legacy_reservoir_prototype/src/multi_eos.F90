@@ -41,7 +41,11 @@
 
     use shape_functions_Linear_Quadratic
     use cv_advection
+    use sparse_tools
+    use Multiphase_module
+    use sparsity_patterns_meshes, only : get_csr_sparsity_firstorder
 
+    implicit none
 
     type corey_options
        REAL :: S_GC
@@ -56,6 +60,12 @@
        logical :: boost_at_zero_saturation
               
     end type corey_options
+
+    type drag_option_type
+       real :: diameter
+       real :: coefficient
+       logical :: is_quadratic
+    end type drag_option_type
 
   contains
 
@@ -593,7 +603,7 @@
       ! Calculate absorption for momentum eqns
       use matrix_operations
       implicit none
-      type( state_type ), dimension( : ), intent( in ) :: state
+      type( state_type ), dimension( : ), intent( inout ) :: state
       integer, dimension( : ), intent( in ) :: cv_ndgln, mat_ndgln
       real, dimension( : ), intent( in ) :: satura
       real, dimension( :, :, : ), intent( in ) :: perm
@@ -609,6 +619,11 @@
       real :: Mobility, pert
       real, dimension( :, :, : ), allocatable :: u_absorb2
       real, dimension( : ), allocatable :: satura2
+
+      logical, dimension(size(state)) :: drag_term
+      integer :: continuous_phase
+      type(drag_option_type), dimension(size(state)) :: drag_options
+      type(block_csr_matrix) :: drag_abs_matrix
 
 !!$ Obtaining a few scalars that will be used in the current subroutine tree:
       call Get_Primary_Scalars( state, &         
@@ -645,6 +660,30 @@
       CALL calculate_absorption2( MAT_NONODS, CV_NONODS, NPHASE, NDIM, SATURA2, TOTELE, CV_NLOC, MAT_NLOC, &
            CV_NDGLN, MAT_NDGLN, &
            U_ABSORB2, PERM, MOBILITY)
+
+      continuous_phase=1
+      drag_term=.false.
+      do IPHASE = 1, NPHASE
+         if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
+           '/multiphase_properties/continuous_phase' ) ) continuous_phase=IPHASE
+         if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
+           '/multiphase_properties/drag' ) ) then
+            call get_drag_options(iphase,state(iphase), drag_options(iphase))
+            drag_term=.true.
+         end if
+      end do
+         
+      if (any(drag_term)) then
+         call initialize_drag_matrix(drag_abs_matrix,state(continuous_phase),nphase)
+         do IPHASE = 1, NPHASE
+            if (drag_term(iphase)) then
+               call add_drag_term(state,drag_abs_matrix,iphase,continuous_phase,drag_options(iphase))
+            end if
+         end do
+         call add_drag_to_old_style_matrix_and_cleanup(drag_abs_matrix,U_ABSORB,state(continuous_phase),&
+              MAT_NONODS, CV_NONODS, NPHASE, NDIM, TOTELE, CV_NLOC, MAT_NLOC, &
+           CV_NDGLN, MAT_NDGLN)
+      end if
 
       DO ELE = 1, TOTELE
          DO CV_ILOC = 1, CV_NLOC
@@ -803,6 +842,141 @@
       RETURN
 
     END SUBROUTINE calculate_absorption2
+    
+
+    subroutine initialize_drag_matrix(absorption,state,nphase)
+      type(block_csr_matrix), intent(inout) :: absorption
+      type(state_type) :: state
+      integer :: nphase
+
+      type(vector_field), pointer :: velocity
+      type(scalar_field), pointer :: volume_fraction
+      type(csr_sparsity), pointer :: sparsity
+
+      
+      
+
+      velocity=>extract_vector_field(state,"Velocity")
+      volume_fraction=>extract_scalar_field(state,"PhaseVolumeFraction")
+
+      sparsity => get_csr_sparsity_firstorder(state, volume_fraction%mesh,volume_fraction%mesh)
+
+      call allocate(absorption,sparsity,(/nphase*velocity%dim,nphase*velocity%dim/)&
+           ,name='DragAbsorption')
+
+      call zero(absorption)
+
+
+    end subroutine initialize_drag_matrix
+
+    subroutine add_drag_to_old_style_matrix_and_cleanup(drag_abs_matrix,U_ABSORB,state,&
+              MAT_NONODS, CV_NONODS, NPHASE, NDIM, TOTELE, CV_NLOC, MAT_NLOC, &
+           CV_NDGLN, MAT_NDGLN)
+       type(block_csr_matrix), intent(inout) :: drag_abs_matrix
+       real, dimension( :, :, : ), intent( inout ) :: u_absorb
+       type(state_type) :: state
+
+       INTEGER, intent( in ) :: MAT_NONODS, CV_NONODS, NPHASE, NDIM, TOTELE, CV_NLOC,MAT_NLOC
+       INTEGER, DIMENSION( TOTELE * CV_NLOC ), intent( in ) :: CV_NDGLN
+      INTEGER, DIMENSION( TOTELE * MAT_NLOC ), intent( in ) :: MAT_NDGLN
+
+       type(scalar_field), pointer :: volume_fraction
+       integer :: ELE,IPHASE,IDIM,JPHASE,JDIM,I,J,MAT_NOD,ICV_LOC
+       integer, dimension(:), pointer :: nodes
+
+       volume_fraction=>extract_scalar_field(state,"PhaseVolumeFraction")
+
+       DO ELE=1,TOTELE
+          do ICV_LOC=1,CV_NLOC
+             MAT_NOD = MAT_NDGLN(( ELE - 1 ) * MAT_NLOC+ICV_LOC)
+             nodes=>ele_nodes(volume_fraction,ele)
+             DO IPHASE=1,NPHASE
+                DO IDIM=1,NDIM
+                   I=(IPHASE-1)*NDIM+IDIM
+                   DO JPHASE=1,NPHASE
+                      DO JDIM=1,NDIM
+                         J=(JPHASE-1)*NDIM+JDIM
+                         U_ABSORB(MAT_NOD,I,J)=U_ABSORB(MAT_NOD,I,J)+&
+                              val(drag_abs_matrix,I,J,nodes(ICV_LOC),nodes(ICV_LOC))
+                      end DO
+                   end Do
+                end DO
+             end DO
+          end DO
+       end do
+
+       call deallocate(drag_abs_matrix)
+
+    end subroutine add_drag_to_old_style_matrix_and_cleanup
+      
+
+    subroutine add_drag_term(state,absorption,dispersed_phase,continuous_phase,drag_options)
+      type(state_type), dimension(:), intent(inout) :: state
+      type(block_csr_matrix), intent(inout) :: absorption
+      type(vector_field), pointer :: continuous_velocity, dispersed_velocity 
+      integer, intent(in) :: dispersed_phase, continuous_phase
+      type(drag_option_type) :: drag_options
+      type(scalar_field), pointer :: continuous_volume_fraction, dispersed_volume_fraction
+      type(scalar_field) :: ratio
+
+      real :: cval
+      integer :: node,ndim, dim,block1,block2, IDIM, stat
+
+
+      cval=4.0d0*drag_options%coefficient/3.0d0*drag_options%diameter
+
+      continuous_velocity=>extract_vector_field(state(continuous_phase),"Velocity",stat)
+      if (stat/=0) then
+         FLAbort("Attempting to add drag term, when no velocity in contiuous phase")
+      end if
+      dispersed_velocity =>extract_vector_field(state(dispersed_phase ),"Velocity",stat)
+      if (stat/=0) then
+         FLAbort("Attempting to add drag term, when no velocity in dispersed phase")
+      end if
+      ndim=continuous_velocity%dim
+
+!      call allocate(continuous_volume_fraction,continuous_velocity%mesh,"ContinuousVolumeFraction")
+!      call get_nonlinear_volume_fraction(state(continuous_phase),continuous_volume_fraction)
+!      call allocate(dispersed_volume_fraction,dispersed_velocity%mesh,"DispersedVolumeFraction")
+!      call get_nonlinear_volume_fraction(state(dispersed_phase),dispersed_volume_fraction)
+!
+
+      continuous_volume_fraction=>extract_scalar_field(state(continuous_phase),"PhaseVolumeFraction",stat)
+      dispersed_volume_fraction=>extract_scalar_field(state(dispersed_phase),"PhaseVolumeFraction",stat)
+      call allocate(ratio,continuous_volume_fraction%mesh,"RatioOfVolumeFractions")
+      call zero(ratio)
+      call set(ratio,continuous_volume_fraction)
+      call invert(ratio)
+      call bound(ratio,1.0d0,huge(0.0))
+      call scale(ratio,dispersed_volume_fraction)
+
+
+      do IDIM=1,ndim
+         block1=(continuous_phase-1)*ndim+IDIM
+         block2=(dispersed_phase-1)*ndim+IDIM
+         do node=1,node_count(continuous_volume_fraction)
+            call addto_diag(absorption,block1,block1,node, cval*ratio%val(node))
+            call addto_diag(absorption,block1,block2,node,-cval*ratio%val(node))
+            call addto_diag(absorption,block2,block1,node,-cval)
+            call addto_diag(absorption,block2,block2,node, cval)
+         end do
+      end do
+
+    end subroutine add_drag_term
+      
+
+    subroutine get_drag_options(phase,state,options)
+      integer :: phase
+      type(state_type) :: state
+      type(drag_option_type) :: options
+
+
+      call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
+           options%diameter, default=0.001)
+      call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
+           options%coefficient, default=0.001)
+
+     end subroutine get_drag_options
 
     subroutine get_corey_options(options)
       type(corey_options) :: options
@@ -1069,6 +1243,8 @@
       integer, dimension(:), pointer :: element_nodes
       integer :: icomp, iphase, idim, stat, ele
 
+      integer :: iloc, mat_iloc
+
       ScalarAdvectionField_Diffusion = 0.
 
       if ( ncomp > 1 ) then
@@ -1132,6 +1308,8 @@
 
       type(scalar_field), pointer :: component, diffusivity
       integer, dimension(:), pointer :: st_nodes
+
+      integer :: iloc
 
       if ( have_option( '/physical_parameters/mobility' ) ) then
 

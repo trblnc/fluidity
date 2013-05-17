@@ -520,7 +520,7 @@
     </scalar_field>
     <scalar_field name="PhaseVolumeFractionProj" rank="0">
       <diagnostic>
-        <algorithm material_phase_support="single" source_field_type="scalar" source_field_name="PhaseVolumeFraction" name="scalar_galerkin_projection"/>
+        <algorithm source_field_type="scalar" material_phase_support="single" name="scalar_galerkin_projection" source_field_name="PhaseVolumeFraction"/>
         <mesh name="PressureMesh_Discontinuous"/>
         <output/>
         <stat/>
@@ -595,11 +595,7 @@ for i in range( field.node_count ):
         </steady_state>
       </diagnostic>
     </scalar_field>
-    <multiphase_properties>
-      <relperm_type>
-        <Corey/>
-      </relperm_type>
-    </multiphase_properties>
+    <multiphase_properties/>
   </material_phase>
   <material_phase name="phase2">
     <equation_of_state>
@@ -868,11 +864,7 @@ for i in range( field.node_count ):
         <consistent_interpolation/>
       </prognostic>
     </scalar_field>
-    <multiphase_properties>
-      <relperm_type>
-        <Corey/>
-      </relperm_type>
-    </multiphase_properties>
+    <multiphase_properties/>
   </material_phase>
   <porous_media>
     <scalar_field name="Porosity">

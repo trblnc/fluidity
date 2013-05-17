@@ -716,7 +716,16 @@ start =
                      ## Option to boost the absorption at zero saturation
                      element boost_at_zero_saturation { comment }?
                   }
-                },
+                }?,
+		## Mark phase as being the continuous phase in dispersed fluid-fluid flow
+		element continuous_phase {
+		     comment
+		}?,
+		element drag {
+		        ## Options controlling form of drag terms for dispersed fluid-particle interactions
+			 element diameter {real},
+			 element coefficient{real}
+		}?, 			 
                ## Option for capillary pressure
                element capillary_pressure {
                   ## Brookes-Corey equation

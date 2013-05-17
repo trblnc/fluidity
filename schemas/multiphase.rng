@@ -864,36 +864,55 @@ via a compressible equation of state.</a:documentation>
           <optional>
             <element name="multiphase_properties">
               <a:documentation>Parameters required to model multiphase flow</a:documentation>
-              <element name="relperm_type">
-                <a:documentation>Option for relperm type in prototype code</a:documentation>
-                <element name="Corey">
-                  <a:documentation>Corey relperm:
+              <optional>
+                <element name="relperm_type">
+                  <a:documentation>Option for relperm type in prototype code</a:documentation>
+                  <element name="Corey">
+                    <a:documentation>Corey relperm:
 
 relperm = relperm_max * saturation**-relperm_exponent</a:documentation>
-                  <optional>
-                    <element name="relperm_max">
-                      <a:documentation>Relative permeability end point
+                    <optional>
+                      <element name="relperm_max">
+                        <a:documentation>Relative permeability end point
 
 Value between 0 and 1. Default value 1.0</a:documentation>
-                      <ref name="real"/>
-                    </element>
-                  </optional>
-                  <optional>
-                    <element name="relperm_exponent">
-                      <a:documentation>Relative permeability exponent
+                        <ref name="real"/>
+                      </element>
+                    </optional>
+                    <optional>
+                      <element name="relperm_exponent">
+                        <a:documentation>Relative permeability exponent
 
 Default value 2.0</a:documentation>
-                      <ref name="real"/>
-                    </element>
-                  </optional>
-                  <optional>
-                    <element name="boost_at_zero_saturation">
-                      <a:documentation>Option to boost the absorption at zero saturation</a:documentation>
-                      <ref name="comment"/>
-                    </element>
-                  </optional>
+                        <ref name="real"/>
+                      </element>
+                    </optional>
+                    <optional>
+                      <element name="boost_at_zero_saturation">
+                        <a:documentation>Option to boost the absorption at zero saturation</a:documentation>
+                        <ref name="comment"/>
+                      </element>
+                    </optional>
+                  </element>
                 </element>
-              </element>
+              </optional>
+              <optional>
+                <element name="continuous_phase">
+                  <a:documentation>Mark phase as being the continuous phase in dispersed fluid-fluid flow</a:documentation>
+                  <ref name="comment"/>
+                </element>
+              </optional>
+              <optional>
+                <element name="drag">
+                  <element name="diameter">
+                    <a:documentation>Options controlling form of drag terms for dispersed fluid-particle interactions</a:documentation>
+                    <ref name="real"/>
+                  </element>
+                  <element name="coefficient">
+                    <ref name="real"/>
+                  </element>
+                </element>
+              </optional>
               <optional>
                 <element name="capillary_pressure">
                   <a:documentation>Option for capillary pressure</a:documentation>
