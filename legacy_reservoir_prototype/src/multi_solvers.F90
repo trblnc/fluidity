@@ -55,7 +55,8 @@ contains
                                                 b, &
                                                 findfe, &
                                                 colfe, &
-                                                option_path)
+                                                option_path,&
+                                                preconditioner_matrix)
   
      !!< Solve a matrix Ax = b system via copying over to the
      !!< petsc_csr_matrix type and calling the femtools solver
@@ -66,12 +67,14 @@ contains
     real, dimension(:), intent(in) :: a,b
     real, dimension(:), intent(inout) :: x
     character(len=*), intent(in) :: option_path
+    real, dimension(:), intent(in), optional :: preconditioner_matrix
     
     ! local variables
     integer :: i,j,k
     integer :: rows
     integer, dimension(:), allocatable :: dnnz
     type(petsc_csr_matrix) :: matrix
+    type(petsc_csr_matrix) :: preconditioner_csr
     type(scalar_field) :: rhs
     type(scalar_field) :: solution
     
@@ -102,7 +105,26 @@ contains
     end do 
 
     call assemble(matrix)    
+
+    if (present(preconditioner_matrix)) then
+           ! allocate the petsc_csr_matrix for preconditioning using nnz (pass dnnz also for onnz) 
+       call allocate(preconditioner_csr, rows, rows, dnnz, dnnz, (/1,1/), name = 'dummy_preconditioner_matrix')
+       call zero(preconditioner_csr)
     
+       ! add in the entries to petsc matrix
+       do i = 1, rows
+          do j = findfe(i), findfe(i+1) - 1
+             k = colfe(j)
+             call addto(preconditioner_csr, blocki = 1, blockj = 1, &
+                  i = i, j = k, val = preconditioner_matrix(j) )
+          end do
+       end do
+    
+
+       call assemble(preconditioner_csr)
+
+    end if
+
     ! Set up rhs and initial guess which are scalar field types.        
     allocate(rhs%val(rows))
     allocate(solution%val(rows))
@@ -113,10 +135,18 @@ contains
     end do
         
     ! solve matrix
-    call petsc_solve(solution, &
-                     matrix, &
-                     rhs, &
-                     option_path = trim(option_path))
+    if (present(preconditioner_matrix)) then
+              call petsc_solve(solution, &
+            matrix, &
+            rhs, &
+            option_path = trim(option_path),&
+            preconditioner_matrix=preconditioner_csr)
+    else
+       call petsc_solve(solution, &
+            matrix, &
+            rhs, &
+            option_path = trim(option_path))
+    end if
     
     ! copy solution back    
     do i = 1,rows
@@ -128,6 +158,10 @@ contains
     deallocate(rhs%val)
     deallocate(solution%val)
     call deallocate(matrix)
+
+    if (present(preconditioner_matrix)) then
+       call deallocate(preconditioner_csr)
+    end if
       
   end subroutine solve_via_copy_to_petsc_csr_matrix
 

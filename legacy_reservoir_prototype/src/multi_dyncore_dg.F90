@@ -1031,7 +1031,7 @@
       ewrite(3,*) 'In FORCE_BAL_CTY_ASSEM_SOLVE'
 
 ! If IGOT_CMC_PRECON=1 use a sym matrix as pressure preconditioner,=0 else CMC as preconditioner as well.
-      IGOT_CMC_PRECON=0
+      IGOT_CMC_PRECON=1
 
       ALLOCATE( ACV( NCOLACV )) ; ACV=0.
       ALLOCATE( CT( NCOLCT * NDIM * NPHASE )) ; CT=0.
@@ -1278,9 +1278,16 @@
             if( cv_nonods==x_nonods ) then ! a continuous pressure:
 ! James feed CMC_PRECON into this sub and use as the preconditioner matrix...
 ! CMC_PRECON has length CMC_PRECON(NCOLCMC*IGOT_CMC_PRECON) 
-               CALL SOLVER( CMC, DP, P_RHS, &
-                    FINDCMC, COLCMC, &
-                    option_path = '/material_phase[0]/scalar_field::Pressure' )
+               if (IGOT_CMC_PRECON==1) then
+                  CALL SOLVER( CMC, DP, P_RHS, &
+                       FINDCMC, COLCMC, &
+                       option_path = '/material_phase[0]/scalar_field::Pressure',&
+                  preconditioner_matrix=cmc_precon)
+               else
+                   CALL SOLVER( CMC, DP, P_RHS, &
+                       FINDCMC, COLCMC, &
+                       option_path = '/material_phase[0]/scalar_field::Pressure')
+                end if
             else ! a discontinuous pressure multi-grid solver:
                CALL PRES_DG_MULTIGRID(CMC, CMC_PRECON, IGOT_CMC_PRECON, DP, P_RHS, &
                     NCOLCMC, cv_NONODS, FINDCMC, COLCMC, MIDCMC, &

@@ -426,13 +426,15 @@ subroutine petsc_solve_vector_components(x, matrix, rhs, option_path)
 end subroutine petsc_solve_vector_components
 
 subroutine petsc_solve_scalar_petsc_csr(x, matrix, rhs, option_path, &
-  prolongators, surface_node_list)
+ preconditioner_matrix, prolongators, surface_node_list)
   !!< Solve a linear system the nice way. Options for this
   !!< come via the options mechanism. 
   type(scalar_field), intent(inout) :: x
   type(scalar_field), intent(in) :: rhs
   type(petsc_csr_matrix), intent(inout) :: matrix
   character(len=*), optional, intent(in) :: option_path
+  !! provide approximation the matrix (only to be used in combination with pctype='KSP')
+  type(petsc_csr_matrix), optional, intent(in) :: preconditioner_matrix
   !! prolongators to be used at the first levels of 'mg'
   type(petsc_csr_matrix), dimension(:), optional, intent(in) :: prolongators
   !! surface_node_list for internal smoothing
@@ -455,6 +457,7 @@ subroutine petsc_solve_scalar_petsc_csr(x, matrix, rhs, option_path, &
         matrix, &
         sfield=x, &
         option_path=option_path, &
+        preconditioner_matrix=preconditioner_matrix,&
         prolongators=prolongators, surface_node_list=surface_node_list)
         
   ! copy array into PETSc vecs
@@ -940,7 +943,7 @@ subroutine petsc_solve_setup_petsc_csr(y, b, ksp, &
   solver_option_path, startfromzero, &
   matrix, sfield, vfield, tfield, &
   option_path, startfromzero_in, &
-  prolongators,surface_node_list)
+  preconditioner_matrix,prolongators,surface_node_list)
 !!< sets up things needed to call petsc_solve_core
 !! Stuff that comes out:
 !!
@@ -969,6 +972,8 @@ character(len=*), intent(in), optional:: option_path
 !! whether to start with zero initial guess (as passed in)
 logical, optional, intent(in):: startfromzero_in
 
+!! provide approximation the matrix (only to be used in combination with pctype='KSP')
+type(petsc_csr_matrix), optional, intent(in) :: preconditioner_matrix
 !! additional info for "mg" preconditioner:
 !! prolongators to be used at the first levels of 'mg'
 type(petsc_csr_matrix), dimension(:), optional, intent(in) :: prolongators
@@ -1020,14 +1025,24 @@ integer, dimension(:), optional, intent(in) :: surface_node_list
     parallel= associated(matrix%row_halo)
   else
     parallel= .false.
+ end if
+
+  if (present(preconditioner_matrix)) then
+     ewrite(2,*)  'Using provided preconditioner matrix'
+     ewrite(2, *) 'Using solver options defined at: ', trim(solver_option_path)
+     call SetupKSP(ksp, matrix%M, preconditioner_matrix%M, solver_option_path, parallel, &
+          matrix%column_numbering, &
+          startfromzero_in=startfromzero_in, &
+          prolongators=prolongators, surface_node_list=surface_node_list)
+  else
+     ewrite(2, *) 'Using solver options defined at: ', trim(solver_option_path)
+     call SetupKSP(ksp, matrix%M, matrix%M, solver_option_path, parallel, &
+          matrix%column_numbering, &
+          startfromzero_in=startfromzero_in, &
+          prolongators=prolongators, surface_node_list=surface_node_list)
   end if
-  
-  ewrite(2, *) 'Using solver options defined at: ', trim(solver_option_path)
-  call SetupKSP(ksp, matrix%M, matrix%M, solver_option_path, parallel, &
-      matrix%column_numbering, &
-      startfromzero_in=startfromzero_in, &
-      prolongators=prolongators, surface_node_list=surface_node_list)
-  
+
+
   b=PetscNumberingCreateVec(matrix%column_numbering)
   call VecDuplicate(b, y, ierr)
   
