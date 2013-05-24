@@ -1031,7 +1031,7 @@
       ewrite(3,*) 'In FORCE_BAL_CTY_ASSEM_SOLVE'
 
 ! If IGOT_CMC_PRECON=1 use a sym matrix as pressure preconditioner,=0 else CMC as preconditioner as well.
-      IGOT_CMC_PRECON=0
+      IGOT_CMC_PRECON=1
 
       ALLOCATE( ACV( NCOLACV )) ; ACV=0.
       ALLOCATE( CT( NCOLCT * NDIM * NPHASE )) ; CT=0.
@@ -1102,7 +1102,9 @@
 
       !ewrite(3,*) 'global_solve, just_bl_diag_mat', global_solve, just_bl_diag_mat
 
+
       if(scale_momentum_by_volume_fraction) then
+
          ! add in the entries to petsc matrix
          do ele = 1, totele
             do cv_iloc = 1, cv_nloc
@@ -1278,9 +1280,16 @@
             if( cv_nonods==x_nonods ) then ! a continuous pressure:
 ! James feed CMC_PRECON into this sub and use as the preconditioner matrix...
 ! CMC_PRECON has length CMC_PRECON(NCOLCMC*IGOT_CMC_PRECON) 
-               CALL SOLVER( CMC, DP, P_RHS, &
-                    FINDCMC, COLCMC, &
-                    option_path = '/material_phase[0]/scalar_field::Pressure' )
+               if (IGOT_CMC_PRECON==1) then
+                  CALL SOLVER( CMC, DP, P_RHS, &
+                       FINDCMC, COLCMC, &
+                       option_path = '/material_phase[0]/scalar_field::Pressure',&
+                  preconditioner_matrix=cmc_precon)
+               else
+                   CALL SOLVER( CMC, DP, P_RHS, &
+                       FINDCMC, COLCMC, &
+                       option_path = '/material_phase[0]/scalar_field::Pressure')
+                end if
             else ! a discontinuous pressure multi-grid solver:
                CALL PRES_DG_MULTIGRID(CMC, CMC_PRECON, IGOT_CMC_PRECON, DP, P_RHS, &
                     NCOLCMC, cv_NONODS, FINDCMC, COLCMC, MIDCMC, &
@@ -3876,6 +3885,9 @@ end if
             If_on_boundary_domain: IF(SELE /= 0) THEN
                ! Put the surface integrals in for pressure b.c.'s
                ! that is add into C matrix and U_RHS. (DG velocities)
+
+              
+
                Loop_ILOC2: DO U_SILOC = 1, U_SNLOC
                   U_ILOC = U_SLOC2LOC( U_SILOC )
                   U_NLOC2=max(1,U_NLOC/CV_NLOC)
@@ -3910,6 +3922,7 @@ end if
                              U_NONODS, FINDC, COLC, NCOLC )
 
                         Loop_Phase2: DO IPHASE = 1, NPHASE
+
                            COUNT_PHA = COUNT + ( IPHASE - 1 ) * NDIM_VEL * NCOLC 
                            IU_PHA_NOD = IU_NOD + ( IPHASE - 1 ) * U_NONODS * NDIM_VEL
                            SUF_P_SJ_IPHA = ( SELE - 1 ) * P_SNLOC + P_SJLOC  + (IPHASE-1)*STOTEL*P_SNLOC
@@ -4191,7 +4204,12 @@ end if
                      SVDOLD2=0.0
                      SWDOLD2=0.0
                      DO IPHASE=1, NPHASE
+
+
                         IF( WIC_U_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_DIRICHLET) THEN
+
+                           print*, 'Uterm MOMCONSERV', iphase, sele2
+
                            DO U_SKLOC=1,U_SNLOC
                               SUF_U_SJ2 = U_SKLOC + U_SNLOC * ( SELE2 - 1 )
                               SUF_U_SJ2_IPHA = SUF_U_SJ2 + STOTEL * U_SNLOC * ( IPHASE - 1 )
@@ -4634,6 +4652,7 @@ end if
 ! BC for incoming momentum...
                               IF( WIC_MOMU_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_DIRICHLET ) THEN 
 
+
                                  IF(MOM_CONSERV) THEN
 
                                     IF(.NOT.NO_MATRIX_STORE) THEN
@@ -4669,7 +4688,7 @@ end if
 
 ! ENDOF IF(MOM_CONSERV) THEN...
                                  ELSE
-
+                                    
                                     IF(.NOT.NO_MATRIX_STORE) THEN
                                        DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) - NN_SNDOTQ_IN
                                     ENDIF
@@ -4684,8 +4703,8 @@ end if
                                     ENDIF
                                     IF(IDIM == 2) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
-                                            - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMV_BC( SUF_U_SJ2_IPHA ) &
-                                            + NN_SNDOTQOLD_IN * VOLD(JU_NOD_PHA)
+                                          - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMV_BC( SUF_U_SJ2_IPHA ) &
+                                             + (NN_SNDOTQOLD_IN) * VOLD(JU_NOD_PHA)
                                        IF(NO_MATRIX_STORE) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                              + NN_SNDOTQ_IN * V(JU_NOD_PHA) 

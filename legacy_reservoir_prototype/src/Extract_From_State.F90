@@ -1075,6 +1075,7 @@
             sele = 1
             do j = 1, stotel
                if( any ( SufID_BC == pmesh % faces % boundary_ids( j ) ) ) then
+
                   wic_bc( j + ( iphase - 1 ) * stotel ) = BC_Type
                   face_nodes = ele_nodes( field_prot_bc, sele )
                   do kk = 1, snloc
@@ -1352,6 +1353,9 @@
            field_w_prot( ( iphase - 1 ) * nonods + 1 : iphase * nonods )
 
       option_path = '/material_phase[' // int2str( iphase - 1 )// ']/vector_field::' // trim( field_name )
+
+      print*, trim(option_path)
+
       option_path2 = trim( option_path ) // '/prognostic/boundary_conditions['
 
       nobcs = get_boundary_condition_count( field )
@@ -1369,16 +1373,23 @@
 
          Conditional_Field_BC: if( have_option( trim( option_path ) // 'type::dirichlet' ) ) then
 
+            print*, trim(option_path)
+
             BC_Type = 1
+
+
 
             face_nodes = (/ ( l, l = 1, snloc2 ) /)
             do j = 1, stotel
                if( any ( sufid_bc == field % mesh % faces % boundary_ids( j ) ) ) then 
                   wic_bc( j  + ( iphase - 1 ) * stotel ) = BC_Type
                   count = 1
+
                   do kk = 1, snloc
+
                      suf_u_bc( ( iphase - 1 ) * stotel * snloc + ( j - 1 ) * snloc + kk ) = &
                           field_prot_bc % val( 1, face_nodes( count ) )
+
                      if( ndim > 1 ) suf_v_bc( ( iphase - 1 ) * stotel * snloc + & 
                           ( j - 1 ) * snloc + kk ) = field_prot_bc % val( 2, face_nodes( count ) )
                      if( ndim > 2 ) suf_w_bc( ( iphase - 1 ) * stotel * snloc + &
