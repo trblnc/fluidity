@@ -14,6 +14,12 @@ Gent_McWilliams.o ../include/gent_mcwilliams.mod: Gent_McWilliams.F90 \
    ../include/elements.mod ../include/fdebug.h ../include/fetools.mod \
    ../include/fldebug.mod
 
+../include/arbitrary_function.mod: Arbitrary_Python.o
+	@true
+
+Arbitrary_Python.o ../include/arbitrary_function.mod: Arbitrary_Python.F90
+
+
 ../include/gls.mod: Gls_vertical_turbulence_model.o
 	@true
 
