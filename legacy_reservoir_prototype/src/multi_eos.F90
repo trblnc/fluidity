@@ -64,7 +64,8 @@
     type drag_option_type
        real :: diameter
        real :: coefficient
-       logical :: is_quadratic
+       real :: Re_s
+       integer :: type
     end type drag_option_type
 
   contains
@@ -516,6 +517,7 @@
             else
                DensityComponent_Field = Density_Field
                Derivative_DensityComponent_Pressure = DRho_DPressure
+               if ( present( DensityCpComponent_Field ) ) DensityCpComponent_Field = Density_Field
             end if
 
          end if
@@ -669,10 +671,10 @@
          if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
            '/multiphase_properties/drag' ) ) then
             call get_drag_options(iphase,state(iphase), drag_options(iphase))
-            drag_term=.true.
+            drag_term(iphase)=.true.
          end if
       end do
-         
+
       if (any(drag_term)) then
          call initialize_drag_matrix(drag_abs_matrix,state(continuous_phase),nphase)
          do IPHASE = 1, NPHASE
@@ -852,14 +854,14 @@
       type(vector_field), pointer :: velocity
       type(scalar_field), pointer :: volume_fraction
       type(csr_sparsity), pointer :: sparsity
-
+      type(mesh_type), pointer :: mesh
       
-      
-
       velocity=>extract_vector_field(state,"Velocity")
       volume_fraction=>extract_scalar_field(state,"PhaseVolumeFraction")
+      mesh=>extract_mesh(state,"PressureMesh_Discontinuous")
 
-      sparsity => get_csr_sparsity_firstorder(state, volume_fraction%mesh,volume_fraction%mesh)
+
+      sparsity => get_csr_sparsity_firstorder(state, mesh,mesh)
 
       call allocate(absorption,sparsity,(/nphase*velocity%dim,nphase*velocity%dim/)&
            ,name='DragAbsorption')
@@ -889,7 +891,6 @@
        DO ELE=1,TOTELE
           do ICV_LOC=1,CV_NLOC
              MAT_NOD = MAT_NDGLN(( ELE - 1 ) * MAT_NLOC+ICV_LOC)
-             nodes=>ele_nodes(volume_fraction,ele)
              DO IPHASE=1,NPHASE
                 DO IDIM=1,NDIM
                    I=(IPHASE-1)*NDIM+IDIM
@@ -897,7 +898,7 @@
                       DO JDIM=1,NDIM
                          J=(JPHASE-1)*NDIM+JDIM
                          U_ABSORB(MAT_NOD,I,J)=U_ABSORB(MAT_NOD,I,J)+&
-                              val(drag_abs_matrix,I,J,nodes(ICV_LOC),nodes(ICV_LOC))
+                              val(drag_abs_matrix,I,J,mat_nod,mat_nod)
                       end DO
                    end Do
                 end DO
@@ -918,14 +919,17 @@
       type(drag_option_type) :: drag_options
       type(scalar_field), pointer :: continuous_volume_fraction, dispersed_volume_fraction
       type(scalar_field) :: ratio
+      type(vector_field) :: deltaV
+      type(mesh_type), pointer :: mesh
 
       real :: cval
-      integer :: node,ndim, dim,block1,block2, IDIM, stat
-
-
-      cval=4.0d0*drag_options%coefficient/3.0d0*drag_options%diameter
+      integer :: node,ndim, dim,block1,block2, IDIM, stat,ele, i,nloc
+      integer, dimension(:), pointer :: nodes
+      integer, dimension(:), pointer :: dg_nodes
 
       continuous_velocity=>extract_vector_field(state(continuous_phase),"Velocity",stat)
+      mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
+
       if (stat/=0) then
          FLAbort("Attempting to add drag term, when no velocity in contiuous phase")
       end if
@@ -934,15 +938,10 @@
          FLAbort("Attempting to add drag term, when no velocity in dispersed phase")
       end if
       ndim=continuous_velocity%dim
-
-!      call allocate(continuous_volume_fraction,continuous_velocity%mesh,"ContinuousVolumeFraction")
-!      call get_nonlinear_volume_fraction(state(continuous_phase),continuous_volume_fraction)
-!      call allocate(dispersed_volume_fraction,dispersed_velocity%mesh,"DispersedVolumeFraction")
-!      call get_nonlinear_volume_fraction(state(dispersed_phase),dispersed_volume_fraction)
-!
-
       continuous_volume_fraction=>extract_scalar_field(state(continuous_phase),"PhaseVolumeFraction",stat)
       dispersed_volume_fraction=>extract_scalar_field(state(dispersed_phase),"PhaseVolumeFraction",stat)
+      nloc=ele_loc(continuous_volume_fraction,1)
+
       call allocate(ratio,continuous_volume_fraction%mesh,"RatioOfVolumeFractions")
       call zero(ratio)
       call set(ratio,continuous_volume_fraction)
@@ -950,17 +949,84 @@
       call bound(ratio,1.0d0,huge(0.0))
       call scale(ratio,dispersed_volume_fraction)
 
-
-      do IDIM=1,ndim
-         block1=(continuous_phase-1)*ndim+IDIM
-         block2=(dispersed_phase-1)*ndim+IDIM
-         do node=1,node_count(continuous_volume_fraction)
-            call addto_diag(absorption,block1,block1,node, cval*ratio%val(node))
-            call addto_diag(absorption,block1,block2,node,-cval*ratio%val(node))
-            call addto_diag(absorption,block2,block1,node,-cval)
-            call addto_diag(absorption,block2,block2,node, cval)
+      select case(drag_options%type)
+      case(1)
+         cval=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)
+         do IDIM=1,ndim
+            block1=(continuous_phase-1)*ndim+IDIM
+            block2=(dispersed_phase-1)*ndim+IDIM
+            do ele=1,ele_count(continuous_volume_fraction)
+               nodes=>ele_nodes(continuous_volume_fraction,ele)
+               dg_nodes=>ele_nodes(mesh,ele)
+               call addto_diag(absorption,block1,block1,dg_nodes, cval*ratio%val(nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,-cval*ratio%val(nodes))
+               call addto_diag(absorption,block2,block1,dg_nodes,spread(-cval,1,nloc))
+               call addto_diag(absorption,block2,block2,dg_nodes,spread( cval,1,nloc))
+            end do
          end do
-      end do
+      case(2)
+         call allocate(deltaV,ndim,mesh,"DeltaV")
+
+         call remap_field(continuous_velocity,deltaV)
+         call addto(deltaV,dispersed_velocity, scale=-1.0)
+
+         cval=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)
+
+         do IDIM=1,ndim
+            block1=(continuous_phase-1)*ndim+IDIM
+            block2=(dispersed_phase-1)*ndim+IDIM
+            do ele=1,ele_count(continuous_volume_fraction)
+               nodes=>ele_nodes(continuous_volume_fraction,ele)
+               dg_nodes=>ele_nodes(mesh,ele)
+
+               call addto_diag(absorption,block1,block1,dg_nodes, cval*ratio%val(nodes)&
+                    *sqrt(sum(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes),dim=1)))
+               call addto_diag(absorption,block1,block2,dg_nodes,-cval*ratio%val(nodes)&
+                    *sqrt(sum(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes),dim=1)))
+               call addto_diag(absorption,block2,block1,dg_nodes,spread(-cval,1,nloc)&
+                    *sqrt(sum(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes),dim=1)))
+               call addto_diag(absorption,block2,block2,dg_nodes,spread( cval,1,nloc)&
+                    *sqrt(sum(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes),dim=1)))
+            end do
+         end do
+
+         call deallocate(deltaV)
+
+
+         case(3)
+         call allocate(deltaV,ndim,mesh,"DeltaV")
+         call allocate(coeff,mesh,"Drag")
+         call remap_field(continuous_velocity,deltaV)
+         call addto(deltaV,dispersed_velocity, scale=-1.0)
+
+         cval=3.0d0/(4.0d0*drag_options%diameter)
+         call remap_field(continuous_volume_fraction,coeff)
+
+         coeff%val=24.0d0*cval/options%Re_s&
+              *(1.0d0+0.15*(coeff%val)**0.687)&
+              *sqrt(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes)))&
+              *coeff%val**-2.65
+
+         
+         do IDIM=1,ndim
+            block1=(continuous_phase-1)*ndim+IDIM
+            block2=(dispersed_phase-1)*ndim+IDIM
+            do ele=1,ele_count(continuous_volume_fraction)
+               nodes=>ele_nodes(continuous_volume_fraction,ele)
+               dg_nodes=>ele_nodes(mesh,ele)
+
+               call addto_diag(absorption,block1,block1,dg_nodes, coeff%val(dg_nodes)*ratio%val(nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,coeff%val(dg_nodes)*ratio%val(nodes))
+               call addto_diag(absorption,block2,block1,dg_nodes,-coeff%val(dg_nodes))
+               call addto_diag(absorption,block2,block2,dg_nodes, coeff%val(dg_nodes))
+            end do
+         end do
+
+         call deallocate(deltaV)
+         call deallocat(coeff)
+      end select
+
+      call deallocate(ratio)
 
     end subroutine add_drag_term
       
@@ -969,12 +1035,28 @@
       integer :: phase
       type(state_type) :: state
       type(drag_option_type) :: options
+      character(len= OPTION_PATH_LEN) :: type
 
+      call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/name",&
+           type)
 
-      call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
-           options%diameter, default=0.001)
-      call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
-           options%coefficient, default=0.001)
+      select case(trim(type))
+      case("Linear")
+         options%type=1
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
+              options%diameter, default=0.001)
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
+              options%coefficient, default=0.001)
+      case("Quadratic")
+         options%type=2
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
+              options%diameter, default=0.001)
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
+              options%coefficient, default=0.001)
+      case default
+         FLAbort("Unknown drag type in phase "//state%name)
+      end select
+
 
      end subroutine get_drag_options
 

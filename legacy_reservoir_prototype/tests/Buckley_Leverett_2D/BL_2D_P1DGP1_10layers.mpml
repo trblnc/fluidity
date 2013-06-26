@@ -368,7 +368,7 @@
         </tensor_field>
         <vector_field name="Absorption" rank="1">
           <diagnostic>
-            <mesh name="PressureMesh"/>
+            <mesh name="PressureMesh_Discontinuous"/>
             <algorithm name="Internal" material_phase_support="multiple"/>
             <output/>
             <stat>
@@ -752,7 +752,7 @@ for i in range( field.node_count ):
         </tensor_field>
         <vector_field name="Absorption" rank="1">
           <diagnostic>
-            <mesh name="PressureMesh"/>
+            <mesh name="PressureMesh_Discontinuous"/>
             <algorithm name="Internal" material_phase_support="multiple"/>
             <output/>
             <stat>

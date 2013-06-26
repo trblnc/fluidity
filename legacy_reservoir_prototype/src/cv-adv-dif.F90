@@ -263,7 +263,6 @@
 
 
       ! Local variables 
-      LOGICAL, PARAMETER :: INCLUDE_PORE_VOL_IN_DERIV = .FALSE.
       INTEGER, PARAMETER :: WIC_T_BC_DIRICHLET = 1, WIC_T_BC_ROBIN = 2, &
            WIC_T_BC_DIRI_ADV_AND_ROBIN = 3, WIC_D_BC_DIRICHLET = 1, &
            WIC_U_BC_DIRICHLET = 1
@@ -538,7 +537,7 @@
       UP_WIND_NOD = 0.0
 
       ALLOCATE( ONE_PORE( TOTELE ))
-      IF( INCLUDE_PORE_VOL_IN_DERIV ) THEN
+      IF( have_option( '/porous_media/actual_velocity' ) ) THEN
          ! solve for actual velocity
          ONE_PORE = VOLFRA_PORE
       ELSE
@@ -6913,6 +6912,14 @@
 !                  RESIDGI=max( abs(TGI-TOLDGI)/DT,2.*courant_or_minus_one_new/DT)
 !                  RESIDGI=max( abs(TGI-TOLDGI)/DT,1.*sqrt(udgi**2+vdgi**2+wdgi**2)/hdc)
                   RESIDGI=sqrt(udgi**2+vdgi**2+wdgi**2)/hdc
+! Zh*******
+!  Spread over 4 elements:
+!                  RESIDGI=  max(0., min(1. , -1. + 0.5/tolfun(abs(T(CV_NODI_IPHA) - T(CV_NODj_IPHA)))   )) &
+!                        * sqrt(udgi**2+vdgi**2+wdgi**2)/hdc
+!  Spread over 20 elements:
+!                  RESIDGI=  max(0., min(1. , -1. + 0.1/tolfun(abs(T(CV_NODI_IPHA) - T(CV_NODj_IPHA)))   )) &
+!                        * sqrt(udgi**2+vdgi**2+wdgi**2)/hdc
+!
 !                  RESIDGI=sqrt(A_STAR_X**2+A_STAR_Y**2+A_STAR_Z**2)/hdc
 !                  stop 272
  

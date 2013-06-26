@@ -216,7 +216,7 @@
       type( state_type ) :: alg_ext, alg_fl
       type( mesh_type ), pointer :: fl_mesh, p0_fl_mesh
       type( vector_field ) :: fl_positions
-      type( scalar_field ) :: dummy
+      type( scalar_field ) :: volume_fraction
 
       type( scalar_field ), pointer :: pressure
 
@@ -228,6 +228,7 @@
 
       character( len = OPTION_PATH_LEN ) :: &
            path = "/tmp/galerkin_projection/continuous"
+      integer :: i
 
       ewrite(3,*) 'inside interpolate_fractures'
 
@@ -291,16 +292,22 @@
       field_ext_p22 = extract_scalar_field( permeability, 2, 2 )
       call insert( alg_ext, field_ext_p22, "Permeability22" )
 
-      ! dummy field needed for the interpolation
-      call allocate( dummy, pressure%mesh, "Dummy" )
-      call zero( dummy )
+      ! volume fraction, i.e. porosity...
+      call allocate( volume_fraction, p0_fl_mesh, "VolumeFraction" )
+      call zero( volume_fraction )
 
       ewrite(3,*) '...interpolating'
 
       ! interpolate
-      call interpolation_galerkin_femdem( alg_ext, alg_fl, field = dummy )
+      call interpolation_galerkin_femdem( alg_ext, alg_fl, field = volume_fraction )
+
+      ! bound volume fraction
+      do i = 1, node_count( volume_fraction )
+         call set( volume_fraction, i, max( 0., min( 1., node_val( volume_fraction, i ) ) ) )
+      end do
 
       ! copy memory to prototype
+      ! ...for permeability
       call get_option( "/porous_media/Permeability_from_femdem/background_permeability", bgp )
 
       allocate( perm_bg( totele, ndim, ndim ) )
@@ -309,15 +316,53 @@
       perm_bg( :, 2, 1 ) = 0.
       perm_bg( :, 2, 2 ) = bgp
 
-      perm( :, 1, 1 ) = perm_bg( :, 1, 1 ) + field_fl_p11 % val
-      perm( :, 1, 2 ) = perm_bg( :, 1, 2 ) + field_fl_p12 % val
-      perm( :, 2, 1 ) = perm_bg( :, 2, 1 ) + field_fl_p21 % val
-      perm( :, 2, 2 ) = perm_bg( :, 2, 2 ) + field_fl_p22 % val
+      do i = 1, totele
+         if ( volume_fraction % val( i ) > 1.e-7 ) then
+            perm( i, 1, 1 ) =  field_fl_p11 % val( i ) / volume_fraction % val( i ) 
+            perm( i, 1, 2 ) =  field_fl_p12 % val( i ) / volume_fraction % val( i ) 
+            perm( i, 2, 1 ) =  field_fl_p21 % val( i ) / volume_fraction % val( i ) 
+            perm( i, 2, 2 ) =  field_fl_p22 % val( i ) / volume_fraction % val( i ) 
+         else
+            perm( i, 1, 1 ) = perm_bg( i, 1, 1 )
+            perm( i, 1, 2 ) = perm_bg( i, 1, 2 )
+            perm( i, 2, 1 ) = perm_bg( i, 2, 1 )
+            perm( i, 2, 2 ) = perm_bg( i, 2, 2 )
+         end if
+      end do
+
+      !perm( :, 1, 1 ) = ( 1. - volume_fraction % val ) * perm_bg( :, 1, 1 ) + field_fl_p11 % val
+      !perm( :, 1, 2 ) = ( 1. - volume_fraction % val ) * perm_bg( :, 1, 2 ) + field_fl_p12 % val
+      !perm( :, 2, 1 ) = ( 1. - volume_fraction % val ) * perm_bg( :, 2, 1 ) + field_fl_p21 % val
+      !perm( :, 2, 2 ) = ( 1. - volume_fraction % val ) * perm_bg( :, 2, 2 ) + field_fl_p22 % val
+
+      !ewrite(3,*) ' permeability tensor:'
+      !ewrite(3,*) 'xx', perm( :, 1, 1 )
+      !ewrite(3,*) 'xy', perm( :, 1, 2 )
+      !ewrite(3,*) 'yx', perm( :, 2, 1 )
+      !ewrite(3,*) 'yy', perm( :, 2, 2 )
+
+      !ewrite(3,*) 'xx min_max', minval( perm( :, 1, 1 ) ), maxval( perm( :, 1, 1 ) )
+      !ewrite(3,*) 'xy min_max', minval( perm( :, 1, 2 ) ), maxval( perm( :, 1, 2 ) )
+      !ewrite(3,*) 'yx min_max', minval( perm( :, 2, 1 ) ), maxval( perm( :, 2, 1 ) )
+      !ewrite(3,*) 'yy min_max', minval( perm( :, 2, 2 ) ), maxval( perm( :, 2, 2 ) )
+      !stop 749
+
+      ! ...for porosity
+      porosity = ( 1. - volume_fraction % val ) * porosity + volume_fraction % val * 1.
+
+      ! bound porosity
+      do i = 1, totele
+         porosity( i ) = max( 0., min( 1., porosity( i ) ) )
+      end do
+
+      !ewrite(3,*) ' porosity:'
+      !ewrite(3,*) 'phi', porosity
+      !ewrite(3,*) 'phi min_max', minval( porosity ), maxval( porosity )
 
       ! now deallocate
       deallocate( perm_bg )
 
-      call deallocate( dummy )
+      call deallocate( volume_fraction )
 
       call deallocate( field_fl_p22 )
       call deallocate( field_fl_p21 )
