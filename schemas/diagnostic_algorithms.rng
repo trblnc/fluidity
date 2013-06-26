@@ -1175,6 +1175,52 @@ for material i and \nu^i is the viscosity of material i</a:documentation>
       </attribute>
     </element>
   </define>
+  <define name="arbitrary_function">
+    <element name="algorithm">
+      <attribute name="name">
+        <value>arbitrary_function</value>
+      </attribute>
+      <element name="function">
+        <ref name="python_code"/>
+      </element>
+      <oneOrMore>
+        <element name="argument">
+          <a:documentation>If fields from other material_phases are required, use the :: operator.
+For example, if the other material_phase's name is Water, and the
+field name is Velocity, then use:
+
+Water::Velocity</a:documentation>
+          <attribute name="name">
+            <data type="string"/>
+          </attribute>
+          <choice>
+            <element name="type">
+              <attribute name="name">
+                <value>scalar_field</value>
+              </attribute>
+            </element>
+            <element name="type">
+              <attribute name="name">
+                <value>vector_field</value>
+              </attribute>
+            </element>
+            <element name="type">
+              <attribute name="name">
+                <value>tensor_field</value>
+              </attribute>
+            </element>
+          </choice>
+          <optional>
+            <element name="material_phase">
+              <attribute name="name">
+                <data type="string"/>
+              </attribute>
+            </element>
+          </optional>
+        </element>
+      </oneOrMore>
+    </element>
+  </define>
   <!-- Python diagnostics -->
   <define name="scalar_python_diagnostic_algorithm">
     <element name="algorithm">
@@ -1887,6 +1933,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="column_id_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="arbitrary_function"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_python_diagnostic_algorithm"/>

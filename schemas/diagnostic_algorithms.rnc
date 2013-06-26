@@ -874,6 +874,38 @@ element_universal_numbering_algorithm =
       }
    )
 
+
+arbitrary_function =
+   (
+      element algorithm {
+      	      attribute name { "arbitrary_function" },
+	      element function {
+	  python_code
+	},
+	## If fields from other material_phases are required, use the :: operator.
+        ## For example, if the other material_phase's name is Water, and the
+        ## field name is Velocity, then use:
+        ##
+        ## Water::Velocity
+	element argument {
+	    attribute name { xsd:string },
+	    (
+	    element type {
+	      	   attribute name { "scalar_field"}
+	    }|
+	    element type {
+	      	   attribute name { "vector_field"}
+            }|
+            element type {	
+                   attribute name { "tensor_field"}
+	    }),
+	    element material_phase {
+		   	   attribute name {xsd:string}
+			   }?
+	    }+
+}
+)	
+
 # Python diagnostics
 scalar_python_diagnostic_algorithm = 
    (
@@ -884,7 +916,7 @@ scalar_python_diagnostic_algorithm =
       ## 'time' and 'dt' are the current time and timestep.
       element algorithm {
          attribute name { "scalar_python_diagnostic" },
-         attribute material_phase_support { "single"|"multiple" },
+         attribute material_phase_support{ "single" | "multiple" },
          python_code,
          ## Enable to specify dependencies manually. Any field specified here
          ## will be calculated before this python diagnostic field.
@@ -1367,6 +1399,7 @@ scalar_diagnostic_algorithms |= element_halo_diagnostic_algorithm
 scalar_diagnostic_algorithms |= div_algorithm
 scalar_diagnostic_algorithms |= curl_2d_algorithm
 scalar_diagnostic_algorithms |= column_id_algorithm
+scalar_diagnostic_algorithms |= arbitrary_function
 scalar_diagnostic_algorithms |= scalar_python_diagnostic_algorithm
 
 vector_diagnostic_algorithms = vector_time_averaged_algorithm

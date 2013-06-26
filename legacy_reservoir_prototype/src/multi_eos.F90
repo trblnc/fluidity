@@ -44,6 +44,7 @@
     use sparse_tools
     use Multiphase_module
     use sparsity_patterns_meshes, only : get_csr_sparsity_firstorder
+    use arbitrary_function
 
     implicit none
 
@@ -66,6 +67,7 @@
        real :: coefficient
        real :: Re_s
        integer :: type
+       type(function_data) ::python_data
     end type drag_option_type
 
   contains
@@ -670,7 +672,7 @@
            '/multiphase_properties/continuous_phase' ) ) continuous_phase=IPHASE
          if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
            '/multiphase_properties/drag' ) ) then
-            call get_drag_options(iphase,state(iphase), drag_options(iphase))
+            call get_drag_options(iphase,state, drag_options(iphase))
             drag_term(iphase)=.true.
          end if
       end do
@@ -685,7 +687,9 @@
          call add_drag_to_old_style_matrix_and_cleanup(drag_abs_matrix,U_ABSORB,state(continuous_phase),&
               MAT_NONODS, CV_NONODS, NPHASE, NDIM, TOTELE, CV_NLOC, MAT_NLOC, &
            CV_NDGLN, MAT_NDGLN)
+         call clean_drag_options(drag_options,drag_term)
       end if
+
 
       DO ELE = 1, TOTELE
          DO CV_ILOC = 1, CV_NLOC
@@ -918,7 +922,7 @@
       integer, intent(in) :: dispersed_phase, continuous_phase
       type(drag_option_type) :: drag_options
       type(scalar_field), pointer :: continuous_volume_fraction, dispersed_volume_fraction
-      type(scalar_field) :: ratio
+      type(scalar_field) :: ratio, coeff
       type(vector_field) :: deltaV
       type(mesh_type), pointer :: mesh
 
@@ -950,6 +954,22 @@
       call scale(ratio,dispersed_volume_fraction)
 
       select case(drag_options%type)
+      case(0)
+         call allocate(coeff,mesh,"Drag")
+         call callculate_function_at_nodes(drag_options%python_data,coeff)
+         do IDIM=1,ndim
+            block1=(continuous_phase-1)*ndim+IDIM
+            block2=(dispersed_phase-1)*ndim+IDIM
+            do ele=1,ele_count(continuous_volume_fraction)
+               nodes=>ele_nodes(continuous_volume_fraction,ele)
+               dg_nodes=>ele_nodes(mesh,ele)
+               call addto_diag(absorption,block1,block1,dg_nodes, coeff%val(nodes)*ratio%val(nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,-coeff%val(nodes)*ratio%val(nodes))
+               call addto_diag(absorption,block2,block1,dg_nodes,-coeff%val(nodes))
+               call addto_diag(absorption,block2,block2,dg_nodes,-coeff%val(nodes))
+            end do
+         end do
+         call deallocate(coeff)
       case(1)
          cval=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)
          do IDIM=1,ndim
@@ -1002,10 +1022,10 @@
          cval=3.0d0/(4.0d0*drag_options%diameter)
          call remap_field(continuous_volume_fraction,coeff)
 
-         coeff%val=24.0d0*cval/options%Re_s&
+         coeff%val=24.0*cval/drag_options%Re_s&
               *(1.0d0+0.15*(coeff%val)**0.687)&
-              *sqrt(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes)))&
-              *coeff%val**-2.65
+              *sum(sqrt(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes)),dim=1)&
+              *coeff%val**(-2.65)
 
          
          do IDIM=1,ndim
@@ -1023,7 +1043,7 @@
          end do
 
          call deallocate(deltaV)
-         call deallocat(coeff)
+         call deallocate(coeff)
       end select
 
       call deallocate(ratio)
@@ -1033,7 +1053,7 @@
 
     subroutine get_drag_options(phase,state,options)
       integer :: phase
-      type(state_type) :: state
+      type(state_type), dimension(:) :: state
       type(drag_option_type) :: options
       character(len= OPTION_PATH_LEN) :: type
 
@@ -1041,6 +1061,9 @@
            type)
 
       select case(trim(type))
+      case("python_function")
+         options%type=0
+         call initialize_function_data(state,option_path,options%python_data)
       case("Linear")
          options%type=1
          call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
@@ -1054,11 +1077,26 @@
          call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
               options%coefficient, default=0.001)
       case default
-         FLAbort("Unknown drag type in phase "//state%name)
+         FLAbort("Unknown drag type in phase "//state(phase)%name)
       end select
 
 
      end subroutine get_drag_options
+
+    subroutine clean_drag_options(options,clean_option)
+      type(drag_option_type), dimension(i) :: options
+      logical, dimension(:) :: slean_option
+
+      do i=1,size(drag_options)
+         if( clean_option(i)) then
+            select case(options(i)%type)
+            case(0)
+               call finalize(options%python_data)
+            end select
+         end if
+      end do
+      
+    end subroutine clean_drag_options
 
     subroutine get_corey_options(options)
       type(corey_options) :: options
