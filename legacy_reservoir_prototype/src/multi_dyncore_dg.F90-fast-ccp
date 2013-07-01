@@ -3246,18 +3246,20 @@ end if
 
             RESID=0.0
 
+         DO GI=1, CV_NGI
             DO IPHASE = 1, NPHASE
                DO IDIM = 1, NDIM_VEL 
                   IPHA_IDIM=(IPHASE-1)*NDIM_VEL + IDIM
                   DO JPHASE = 1, NPHASE
                      DO JDIM = 1, NDIM_VEL 
                         JPHA_JDIM=(JPHASE-1)*NDIM_VEL + JDIM
-                        RESID(IDIM,IPHASE,:)=RESID(IDIM,IPHASE,:) + &
-                                SIGMAGI( IPHA_IDIM, JPHA_JDIM, : )*UD( JDIM, IPHASE, : )
+                        RESID(IDIM,IPHASE,GI)=RESID(IDIM,IPHASE,GI) + &
+                                SIGMAGI( IPHA_IDIM, JPHA_JDIM, GI )*UD( JDIM, JPHASE, GI )
                      END DO
                   END DO
                END DO
             END DO
+         END DO
 
             RESID_U=RESID
 
