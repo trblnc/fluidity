@@ -3574,6 +3574,8 @@ end if
 ! for normal calc...
                SLOC_UDEN(:, CV_SILOC)  =UDEN(:,CV_INOD)
                SLOC2_UDEN(:, CV_SILOC)=UDEN(:,CV_INOD2)
+               SLOC_UDENOLD(:, CV_SILOC)  =UDENOLD(:,CV_INOD)
+               SLOC2_UDENOLD(:, CV_SILOC)=UDENOLD(:,CV_INOD2)
             END DO
 
 ! velocity variables...
@@ -3583,15 +3585,15 @@ end if
                U_INOD=U_NDGLN((ELE-1)*U_NLOC+U_ILOC) 
                U_INOD=U_NDGLN((ELE2-1)*U_NLOC+U_ILOC2) 
 ! for normal calc...
-               SLOC_U(:,U_SILOC)=U(:,U_INOD)
-               SLOC_UOLD(:,U_SILOC)=UOLD(:,U_INOD)
-               SLOC2_U(:,U_SILOC)=U(:,U_INOD2)
-               SLOC2_UOLD(:,U_SILOC)=UOLD(:,U_INOD2)
+               SLOC_U(:,:,U_SILOC)=U(:,:,U_INOD)
+               SLOC_UOLD(:,:,U_SILOC)=UOLD(:,:,U_INOD)
+               SLOC2_U(:,:,U_SILOC)=U(:,:,U_INOD2)
+               SLOC2_UOLD(:,:,U_SILOC)=UOLD(:,:,U_INOD2)
 
-               SLOC_NU(:,U_SILOC)=NU(:,U_INOD)
-               SLOC_NUOLD(:,U_SILOC)=NUOLD(:,U_INOD)
-               SLOC2_NU(:,U_SILOC)=NU(:,U_INOD2)
-               SLOC2_NUOLD(:,U_SILOC)=NUOLD(:,U_INOD2)
+               SLOC_NU(:,:,U_SILOC)=NU(:,:,U_INOD)
+               SLOC_NUOLD(:,:,U_SILOC)=NUOLD(:,:,U_INOD)
+               SLOC2_NU(:,:,U_SILOC)=NU(:,:,U_INOD2)
+               SLOC2_NUOLD(:,:,U_SILOC)=NUOLD(:,:,U_INOD2)
             END DO
 ! ********Mapping to local variables****************
 

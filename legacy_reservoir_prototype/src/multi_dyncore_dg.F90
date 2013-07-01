@@ -2313,6 +2313,12 @@
 
       REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_ABSORB,LOC_U_ABS_STAB
       REAL, DIMENSION ( :, :, :, : ), allocatable :: LOC_UDIFFUSION
+! internal/external surfaces...
+      REAL, DIMENSION ( :, : ), allocatable :: SLOC_UDEN, SLOC2_UDEN, SLOC_UDENOLD, SLOC2_UDENOLD
+      REAL, DIMENSION ( :, :, : ), allocatable :: SLOC_U, SLOC2_U, SLOC_UOLD, SLOC2_UOLD
+      REAL, DIMENSION ( :, :, : ), allocatable :: SLOC_NU, SLOC2_NU, SLOC_NUOLD, SLOC2_NUOLD
+      REAL, DIMENSION ( : ), allocatable :: NORMX_ALL
+      REAL, DIMENSION ( :, : ), allocatable :: SNORMXN_ALL
 
       LOGICAL :: D1, D3, DCYL, GOT_DIFFUS, GOT_UDEN, DISC_PRES, QUAD_OVER_WHOLE_ELE
       INTEGER :: CV_NGI, CV_NGI_SHORT, SCVNGI, SBCVNGI, NFACE
@@ -2344,7 +2350,7 @@
            VOLD_NODJ_SGI_IPHASE, VOLD_NODI_SGI_IPHASE, &
            W_NODJ_SGI_IPHASE, W_NODI_SGI_IPHASE, &
            WOLD_NODJ_SGI_IPHASE, WOLD_NODI_SGI_IPHASE
-      INTEGER :: P_INOD, U_INOD_IPHA, U_JNOD, U_KLOC2, U_NODK2, U_NODK2_PHA, GLOBJ_IPHA, CV_INOD
+      INTEGER :: P_INOD, U_INOD_IPHA, U_JNOD, U_KLOC2, U_NODK2, U_NODK2_PHA, GLOBJ_IPHA, CV_INOD, CV_ILOC2, CV_INOD2
       logical firstst,NO_MATRIX_STORE
       character( len = 100 ) :: name
 
@@ -2673,6 +2679,14 @@
       ALLOCATE( LOC_U_ABSORB(NDIM_VEL* NPHASE, NDIM_VEL* NPHASE, MAT_NLOC) ) 
       ALLOCATE( LOC_U_ABS_STAB(NDIM_VEL* NPHASE, NDIM_VEL* NPHASE, MAT_NLOC) ) 
       ALLOCATE( LOC_UDIFFUSION(NDIM, NDIM, NPHASE, MAT_NLOC) ) 
+! internal/external surfaces...
+      ALLOCATE( SLOC_UDEN(NPHASE,CV_SNLOC),  SLOC2_UDEN(NPHASE,CV_SNLOC) ) 
+      ALLOCATE( SLOC_UDENOLD(NPHASE,CV_SNLOC),  SLOC2_UDENOLD(NPHASE,CV_SNLOC) ) 
+      ALLOCATE( SLOC_U(NDIM,NPHASE,U_SNLOC),  SLOC2_U(NDIM,NPHASE,U_SNLOC) ) 
+      ALLOCATE( SLOC_UOLD(NDIM,NPHASE,U_SNLOC),  SLOC2_UOLD(NDIM,NPHASE,U_SNLOC) ) 
+      ALLOCATE( SLOC_NU(NDIM,NPHASE,U_SNLOC),  SLOC2_NU(NDIM,NPHASE,U_SNLOC) ) 
+      ALLOCATE( SLOC_NUOLD(NDIM,NPHASE,U_SNLOC),  SLOC2_NUOLD(NDIM,NPHASE,U_SNLOC) ) 
+      ALLOCATE( NORMX_ALL(NDIM), SNORMXN_ALL(NDIM,SBCVNGI) )
 
 
 
@@ -3956,6 +3970,10 @@ end if
             CALL DGSIMPLNORM( ELE, CV_SLOC2LOC, TOTELE, CV_NLOC, CV_SNLOC, X_NDGLN, &
                  X, Y, Z, X_NONODS, NORMX, NORMY, NORMZ )
 
+            NORMX_ALL(1)=NORMX
+            IF(NDIM.GE.2) NORMX_ALL(2)=NORMY
+            IF(NDIM.GE.3) NORMX_ALL(3)=NORMZ
+
             ! Recalculate the normal...
             DO CV_SILOC=1,CV_SNLOC
                CV_ILOC=CV_SLOC2LOC(CV_SILOC)
@@ -3973,6 +3991,10 @@ end if
                  NORMX,NORMY,NORMZ)
             !ewrite(3,*)'sarea=',sarea
             !stop 8821
+
+            SNORMXN_ALL(1,:)=SNORMXN(:)
+            IF(NDIM.GE.2) SNORMXN_ALL(2,:)=SNORMYN(:)
+            IF(NDIM.GE.3) SNORMXN_ALL(3,:)=SNORMZN(:)
 
             If_on_boundary_domain: IF(SELE /= 0) THEN
                ! Put the surface integrals in for pressure b.c.'s
@@ -4070,7 +4092,7 @@ end if
                         END DO
                      END DO
                   ENDIF
-               ELSE
+               ELSE ! Not overlapping
                   U_OTHER_LOC=0
                   U_ILOC_OTHER_SIDE=0
                   IF( XU_NLOC == 1 ) THEN ! For constant vel basis functions...
@@ -4104,6 +4126,72 @@ end if
                END DO
 
             ENDIF If_ele2_notzero_1
+
+
+! ********Mapping to local variables****************
+! CV variables...
+            DO CV_SILOC=1,CV_SNLOC
+               CV_ILOC=CV_SLOC2LOC(CV_SILOC)
+               CV_ILOC2=U_ILOC_OTHER_SIDE( U_SILOC ) 
+               CV_INOD=CV_NDGLN((ELE-1)*CV_NLOC+CV_ILOC) 
+               CV_INOD2=CV_NDGLN((ELE2-1)*CV_NLOC+CV_ILOC2) 
+! for normal calc...
+               SLOC_UDEN(:, CV_SILOC)  =UDEN( (IPHASE-1)*CV_NONODS+ CV_INOD)
+               SLOC2_UDEN(:, CV_SILOC)=UDEN( (IPHASE-1)*CV_NONODS+ CV_INOD2)
+               SLOC_UDEN(:, CV_SILOC)  =UDEN( (IPHASE-1)*CV_NONODS+ CV_INOD)
+               SLOC2_UDEN(:, CV_SILOC)=UDEN( (IPHASE-1)*CV_NONODS+ CV_INOD2)
+            END DO
+
+! velocity variables...
+            DO U_SILOC=1,U_SNLOC
+               U_ILOC=U_SLOC2LOC(U_SILOC)
+               U_ILOC2=U_ILOC_OTHER_SIDE( U_SILOC ) 
+               U_INOD=U_NDGLN((ELE-1)*U_NLOC+U_ILOC) 
+               U_INOD=U_NDGLN((ELE2-1)*U_NLOC+U_ILOC2) 
+! for normal calc...
+               DO IDIM=1,NDIM_VEL
+                  IF(IDIM==1) THEN
+                     SLOC_U(IDIM,:,U_SILOC)=U( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC_UOLD(IDIM,:,U_SILOC)=UOLD( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC2_U(IDIM,:,U_SILOC)=U( (IPHASE-1)*U_NONODS+U_INOD2 )
+                     SLOC2_UOLD(IDIM,:,U_SILOC)=UOLD( (IPHASE-1)*U_NONODS+U_INOD2 )
+                  ENDIF
+                  IF(IDIM==2) THEN
+                     SLOC_U(IDIM,:,U_SILOC)=V( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC_UOLD(IDIM,:,U_SILOC)=VOLD( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC2_U(IDIM,:,U_SILOC)=V( (IPHASE-1)*U_NONODS+U_INOD2 )
+                     SLOC2_UOLD(IDIM,:,U_SILOC)=VOLD( (IPHASE-1)*U_NONODS+U_INOD2 )
+                  ENDIF
+                  IF(IDIM==3) THEN
+                     SLOC_U(IDIM,:,U_SILOC)=W( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC_UOLD(IDIM,:,U_SILOC)=WOLD( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC2_U(IDIM,:,U_SILOC)=W( (IPHASE-1)*U_NONODS+U_INOD2 )
+                     SLOC2_UOLD(IDIM,:,U_SILOC)=WOLD( (IPHASE-1)*U_NONODS+U_INOD2 )
+                  ENDIF
+               END DO
+
+               DO IDIM=1,NDIM
+                  IF(IDIM==1) THEN
+                     SLOC_NU(IDIM,:,U_SILOC)=NU( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC_NUOLD(IDIM,:,U_SILOC)=NUOLD( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC2_NU(IDIM,:,U_SILOC)=NU( (IPHASE-1)*U_NONODS+U_INOD2 )
+                     SLOC2_NUOLD(IDIM,:,U_SILOC)=NUOLD( (IPHASE-1)*U_NONODS+U_INOD2 )
+                  ENDIF
+                  IF(IDIM==2) THEN
+                     SLOC_NU(IDIM,:,U_SILOC)=NV( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC_NUOLD(IDIM,:,U_SILOC)=NVOLD( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC2_NU(IDIM,:,U_SILOC)=NV( (IPHASE-1)*U_NONODS+U_INOD2 )
+                     SLOC2_NUOLD(IDIM,:,U_SILOC)=NVOLD( (IPHASE-1)*U_NONODS+U_INOD2 )
+                  ENDIF
+                  IF(IDIM==3) THEN
+                     SLOC_NU(IDIM,:,U_SILOC)=NW( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC_NUOLD(IDIM,:,U_SILOC)=NWOLD( (IPHASE-1)*U_NONODS+U_INOD )
+                     SLOC2_NU(IDIM,:,U_SILOC)=NW( (IPHASE-1)*U_NONODS+U_INOD2 )
+                     SLOC2_NUOLD(IDIM,:,U_SILOC)=NWOLD( (IPHASE-1)*U_NONODS+U_INOD2 )
+                  ENDIF
+               END DO
+            END DO
+! ********Mapping to local variables****************
 
 
             If_diffusion_or_momentum1: IF(GOT_DIFFUS .OR. GOT_UDEN) THEN
