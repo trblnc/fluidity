@@ -3073,6 +3073,20 @@
 
                end do Loop_CVNods2
 
+
+               Loop_DGNods2: do u_jloc = ( 1 + ( ilev - 1 ) * u_nloc2 ), ( ilev * u_nloc2 )
+                  u_jnod = u_ndgln( ( ele - 1 ) * u_nloc + u_jloc )
+
+                  nn = 0. ; rnn = 0. ;nn_sigmagi = 0. ; nn_sigmagi_stab = 0. ; nn_mass = 0. ; nn_massold = 0. ; vlk = 0. ; &
+                       vln = 0. ; vln_old = 0. ; stress_ij = 0. ; 
+
+                  Loop_Gauss2: do gi = ( 1 + ( ilev - 1 ) * cv_ngi_short ), (ilev * cv_ngi_short )
+                    nn = nn + ufen( u_iloc, gi ) * u_fen( u_jloc, gi ) * detwei( gi ) !!! HERER
+                   
+                  end do Loop_Gauss2
+
+               end do Loop_DGNods2
+
                Loop_DGNods2: DO U_JLOC = 1 +(ILEV-1)*U_NLOC2, ILEV*U_NLOC2
                   GLOBJ = U_NDGLN(( ELE - 1 ) * U_NLOC + U_JLOC )
 
