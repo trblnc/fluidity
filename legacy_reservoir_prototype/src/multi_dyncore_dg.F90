@@ -2713,7 +2713,7 @@
       !     RESID_BASED_STAB_DIF,BETWEEN_ELE_STAB,GOT_DIFFUS
       !stop 292
 
-      ALLOCATE(UDIFF_SUF_STAB(NDIM_VEL,NPHASE,SBCVNGI,NDIM,NDIM ))
+      ALLOCATE(UDIFF_SUF_STAB(NDIM,NDIM,NDIM_VEL,NPHASE,SBCVNGI))
       UDIFF_SUF_STAB=0.0
 
       IF(BETWEEN_ELE_STAB) THEN
@@ -4438,17 +4438,17 @@ end if
                   GOT_OTHER_ELE=(ELE2.NE.ELE).and.(ELE2.NE.0)
                   IF(ELE2==0) ELE3=ELE
                   IDIM=1
-                  CALL BETWEEN_ELE_SOLVE_DIF(UDIFF_SUF_STAB(IDIM,:,:,:,: ), &
+                  CALL BETWEEN_ELE_SOLVE_DIF(UDIFF_SUF_STAB(:,:,IDIM,:,:), &
                        DIFF_FOR_BETWEEN_U(ELE,:,:), DIFF_FOR_BETWEEN_U(ELE3,:,:), &
                        MAT_ELE(ELE,:,:), MAT_ELE(ELE3,:,:), U_SLOC2LOC,U_ILOC_OTHER_SIDE, &
                        SBUFEN,SBCVNGI,U_NLOC,U_SNLOC,NDIM,NPHASE,GOT_OTHER_ELE) 
                   IDIM=2
-                  IF(NDIM_VEL.GE.2) CALL BETWEEN_ELE_SOLVE_DIF(UDIFF_SUF_STAB(IDIM,:,:,:,: ), &
+                  IF(NDIM_VEL.GE.2) CALL BETWEEN_ELE_SOLVE_DIF(UDIFF_SUF_STAB(:,:,IDIM,:,:), &
                        DIFF_FOR_BETWEEN_V(ELE,:,:), DIFF_FOR_BETWEEN_V(ELE3,:,:), &
                        MAT_ELE(ELE,:,:), MAT_ELE(ELE3,:,:), U_SLOC2LOC,U_ILOC_OTHER_SIDE, &
                        SBUFEN,SBCVNGI,U_NLOC,U_SNLOC,NDIM,NPHASE,GOT_OTHER_ELE) 
                   IDIM=3
-                  IF(NDIM_VEL.GE.3) CALL BETWEEN_ELE_SOLVE_DIF(UDIFF_SUF_STAB(IDIM,:,:,:,: ), &
+                  IF(NDIM_VEL.GE.3) CALL BETWEEN_ELE_SOLVE_DIF(UDIFF_SUF_STAB(:,:,IDIM,:,:), &
                        DIFF_FOR_BETWEEN_W(ELE,:,:), DIFF_FOR_BETWEEN_W(ELE3,:,:), &
                        MAT_ELE(ELE,:,:), MAT_ELE(ELE3,:,:), U_SLOC2LOC,U_ILOC_OTHER_SIDE, &
                        SBUFEN,SBCVNGI,U_NLOC,U_SNLOC,NDIM,NPHASE,GOT_OTHER_ELE) 
@@ -4519,7 +4519,7 @@ end if
                         CALL DIFFUS_CAL_COEFF_STRESS_OR_TENSOR(DIFF_COEF_DIVDX( :, IPHASE, SGI ), &
                         DIFF_COEFOLD_DIVDX( :, IPHASE, SGI ), STRESS_FORM, ZERO_OR_TWO_THIRDS, &
                         CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
-                        SBCVFEN,SBCVNGI,SGI, IPHASE, NDIM, UDIFFUSION, UDIFF_SUF_STAB(:,IPHASE,SGI,:,: ), &
+                        SBCVFEN,SBCVNGI,SGI, IPHASE, NDIM, UDIFFUSION, UDIFF_SUF_STAB(:,:,:,IPHASE,SGI), &
                         HDC, &
                         U_NODJ_SGI_IPHASE, U_NODI_SGI_IPHASE, &
                         V_NODJ_SGI_IPHASE, V_NODI_SGI_IPHASE, &
@@ -4571,7 +4571,7 @@ end if
                               CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
                                    DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
                                    CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
-                                   SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(IDIM,IPHASE,SGI,:,: ), &
+                                   SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(:,:,IDIM,IPHASE,SGI), &
                                    HDC, &
                                    U_NODJ_SGI_IPHASE,    U_NODI_SGI_IPHASE, &
                                    UOLD_NODJ_SGI_IPHASE, UOLD_NODI_SGI_IPHASE, &
@@ -4583,7 +4583,7 @@ end if
                               CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
                                    DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
                                    CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
-                                   SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(IDIM,IPHASE,SGI,:,: ), &
+                                   SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(:,:,IDIM,IPHASE,SGI), &
                                    HDC, &
                                    V_NODJ_SGI_IPHASE,    V_NODI_SGI_IPHASE, &
                                    VOLD_NODJ_SGI_IPHASE, VOLD_NODI_SGI_IPHASE, &
@@ -4595,7 +4595,7 @@ end if
                               CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
                                    DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
                                    CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
-                                   SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(IDIM,IPHASE,SGI,:,: ), &
+                                   SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(:,:,IDIM,IPHASE,SGI), &
                                    HDC, &
                                    W_NODJ_SGI_IPHASE,    W_NODI_SGI_IPHASE, &
                                    WOLD_NODJ_SGI_IPHASE, WOLD_NODI_SGI_IPHASE, &

@@ -4038,7 +4038,7 @@ END IF
 ! If FAST_AND_SIMP use a simple mean to calculate the between element diffusion.
       INTEGER, intent( in ) :: SBCVNGI,U_NLOC,U_SNLOC,NDIM,NPHASE
       LOGICAL, intent( in ) :: GOT_OTHER_ELE
-      REAL, DIMENSION( NPHASE,SBCVNGI,NDIM,NDIM  ), intent( out ) :: UDIFF_SUF_STAB
+      REAL, DIMENSION( NDIM,NDIM, NPHASE,SBCVNGI ), intent( out ) :: UDIFF_SUF_STAB
       REAL, DIMENSION( NPHASE,U_NLOC ), intent( in ) :: DIFF_FOR_BETWEEN_U_ELE,DIFF_FOR_BETWEEN_U_ELE2
       REAL, DIMENSION( U_NLOC,U_NLOC ), intent( in ) :: MAT_ELE, MAT_ELE2
       INTEGER, DIMENSION( U_SNLOC ), intent( in ) :: U_SLOC2LOC,U_ILOC_OTHER_SIDE
@@ -4072,7 +4072,7 @@ END IF
               END DO
               DIFF_ADD_STAB( : )=MAX(0.0,DIFF_ADD_STAB( : ))
               DO IDIM=1,NDIM
-                 UDIFF_SUF_STAB(IPHASE,:,IDIM,IDIM)=DIFF_ADD_STAB( : )
+                 UDIFF_SUF_STAB(IDIM,IDIM,IPHASE,:)=DIFF_ADD_STAB( : )
               END DO
            END DO
         ELSE
@@ -4085,7 +4085,7 @@ END IF
               END DO
               DIFF_ADD_STAB( : )=MAX(0.0,DIFF_ADD_STAB( : ))
               DO IDIM=1,NDIM
-                 UDIFF_SUF_STAB(IPHASE,:,IDIM,IDIM)=DIFF_ADD_STAB( : )
+                 UDIFF_SUF_STAB(IDIM,IDIM,IPHASE,:)=DIFF_ADD_STAB( : )
               END DO
            END DO
         ENDIF
@@ -4171,7 +4171,7 @@ END IF
 ! Make certain the diffusion is positive between the elements...
          DIFF_ADD_STAB( : )=MAX(0.0,DIFF_ADD_STAB( : ))
          DO IDIM=1,NDIM
-            UDIFF_SUF_STAB(IPHASE,1:SBCVNGI,IDIM,IDIM  )=UDIFF_SUF_STAB(IPHASE,1:SBCVNGI,IDIM,IDIM  ) &
+            UDIFF_SUF_STAB(IDIM,IDIM,IPHASE,1:SBCVNGI)=UDIFF_SUF_STAB(IDIM,IDIM,IPHASE,1:SBCVNGI) &
                + DIFF_ADD_STAB( 1:SBCVNGI )
          END DO
 ! ENDOF DO IPHASE=1,NPHASE...
@@ -4510,23 +4510,23 @@ END IF
             IF(STRESS_FORM) THEN
                DIFF_COEF_DIVDX(1)=8.*( 2.*SNORMXN(SGI)**2*DIFF_GI(1,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI(1,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI(1,3)+DIFF_GI_ADDED(1, 1,1) ) /HDC
+                                   +SNORMZN(SGI)**2*DIFF_GI(1,3)+DIFF_GI_ADDED(1,1, 1) ) /HDC
 
                DIFF_COEF_DIVDX(2)=8.*( SNORMXN(SGI)**2*DIFF_GI(2,1) &
                                       +2.*SNORMYN(SGI)**2*DIFF_GI(2,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI(2,3)+DIFF_GI_ADDED(2, 1,1) ) /HDC
+                                   +SNORMZN(SGI)**2*DIFF_GI(2,3)+DIFF_GI_ADDED(1,1, 2) ) /HDC
 
                DIFF_COEF_DIVDX(3)=8.*( SNORMXN(SGI)**2*DIFF_GI(3,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI(3,2)   &
-                                   +2.*SNORMZN(SGI)**2*DIFF_GI(3,3)+DIFF_GI_ADDED(3, 1,1) ) /HDC
+                                   +2.*SNORMZN(SGI)**2*DIFF_GI(3,3)+DIFF_GI_ADDED(1,1, 3) ) /HDC
             ELSE
                COEF=&
       SNORMXN(SGI)*(DIFF_GI(1,1)*SNORMXN(SGI)+ DIFF_GI(1,2)*SNORMYN(SGI)+DIFF_GI(1,3)*SNORMZN(SGI))&
      +SNORMYN(SGI)*(DIFF_GI(2,1)*SNORMXN(SGI)+ DIFF_GI(2,2)*SNORMYN(SGI)+DIFF_GI(2,3)*SNORMZN(SGI))&
      +SNORMZN(SGI)*(DIFF_GI(3,1)*SNORMXN(SGI)+ DIFF_GI(3,2)*SNORMYN(SGI)+DIFF_GI(3,3)*SNORMZN(SGI))
-               DIFF_COEF_DIVDX(1)=8.*( COEF + DIFF_GI_ADDED(1, 1,1) ) /HDC
-               DIFF_COEF_DIVDX(2)=8.*( COEF + DIFF_GI_ADDED(2, 1,1) ) /HDC
-               DIFF_COEF_DIVDX(3)=8.*( COEF + DIFF_GI_ADDED(3, 1,1) ) /HDC
+               DIFF_COEF_DIVDX(1)=8.*( COEF + DIFF_GI_ADDED(1,1, 1) ) /HDC
+               DIFF_COEF_DIVDX(2)=8.*( COEF + DIFF_GI_ADDED(1,1, 2) ) /HDC
+               DIFF_COEF_DIVDX(3)=8.*( COEF + DIFF_GI_ADDED(1,1, 3) ) /HDC
             ENDIF
 
             DIFF_COEFOLD_DIVDX=DIFF_COEF_DIVDX
@@ -4600,7 +4600,7 @@ END IF
 
 ! U:
             IDIM=1
-            DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+            DIFF_GI_BOTH=DIFF_GI_ADDED(:,:,IDIM)
             IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
             N_DOT_DKDU=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DUDX_GI+DIFF_GI_BOTH(1,2)*DUDY_GI+DIFF_GI_BOTH(1,3)*DUDZ_GI) &
@@ -4616,7 +4616,7 @@ END IF
 
 ! V:
             IDIM=2
-            DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+            DIFF_GI_BOTH=DIFF_GI_ADDED(:,:, IDIM)
             IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
             N_DOT_DKDV=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVDX_GI+DIFF_GI_BOTH(1,2)*DVDY_GI+DIFF_GI_BOTH(1,3)*DVDZ_GI) &
@@ -4632,7 +4632,7 @@ END IF
 
 ! W:
             IDIM=3
-            DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+            DIFF_GI_BOTH=DIFF_GI_ADDED(:,:,IDIM)
             IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
             N_DOT_DKDW=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWDX_GI+DIFF_GI_BOTH(1,2)*DWDY_GI+DIFF_GI_BOTH(1,3)*DWDZ_GI) &
@@ -4679,24 +4679,24 @@ END IF
          ! This is the minimum diffusion...
                DIFF_STAND_DIVDX_U=8.*( 2.*SNORMXN(SGI)**2*DIFF_GI(1,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI(1,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI(1,3)+DIFF_GI_ADDED(1, 1,1) ) /HDC
+                                   +SNORMZN(SGI)**2*DIFF_GI(1,3)+DIFF_GI_ADDED(1,1, 1) ) /HDC
 
                DIFF_STAND_DIVDX_V=8.*( SNORMXN(SGI)**2*DIFF_GI(2,1) &
                                       +2.*SNORMYN(SGI)**2*DIFF_GI(2,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI(2,3)+DIFF_GI_ADDED(2, 1,1) ) /HDC
+                                   +SNORMZN(SGI)**2*DIFF_GI(2,3)+DIFF_GI_ADDED(1,1, 2) ) /HDC
 
                DIFF_STAND_DIVDX_W=8.*( SNORMXN(SGI)**2*DIFF_GI(3,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI(3,2)   &
-                                   +2.*SNORMZN(SGI)**2*DIFF_GI(3,3)+DIFF_GI_ADDED(3, 1,1) ) /HDC
+                                   +2.*SNORMZN(SGI)**2*DIFF_GI(3,3)+DIFF_GI_ADDED(1,1, 3) ) /HDC
 ! ENDOF IF(STRESS_FORM) THEN...
             ELSE
                COEF=&
       SNORMXN(SGI)*(DIFF_GI(1,1)*SNORMXN(SGI)+ DIFF_GI(1,2)*SNORMYN(SGI)+DIFF_GI(1,3)*SNORMZN(SGI))&
      +SNORMYN(SGI)*(DIFF_GI(2,1)*SNORMXN(SGI)+ DIFF_GI(2,2)*SNORMYN(SGI)+DIFF_GI(2,3)*SNORMZN(SGI))&
      +SNORMZN(SGI)*(DIFF_GI(3,1)*SNORMXN(SGI)+ DIFF_GI(3,2)*SNORMYN(SGI)+DIFF_GI(3,3)*SNORMZN(SGI))
-               DIFF_STAND_DIVDX_U=8.*( COEF + DIFF_GI_ADDED(1, 1,1) ) /HDC
-               DIFF_STAND_DIVDX_V=8.*( COEF + DIFF_GI_ADDED(2, 1,1) ) /HDC
-               DIFF_STAND_DIVDX_W=8.*( COEF + DIFF_GI_ADDED(3, 1,1) ) /HDC
+               DIFF_STAND_DIVDX_U=8.*( COEF + DIFF_GI_ADDED(1,1, 1) ) /HDC
+               DIFF_STAND_DIVDX_V=8.*( COEF + DIFF_GI_ADDED(1,1, 2) ) /HDC
+               DIFF_STAND_DIVDX_W=8.*( COEF + DIFF_GI_ADDED(1,1, 3) ) /HDC
 ! ENDOF IF(STRESS_FORM) THEN ELSE...
             ENDIF
 
@@ -4769,7 +4769,7 @@ END IF
 
 ! U:
                IDIM=1
-               DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+               DIFF_GI_BOTH=DIFF_GI_ADDED(:,:,IDIM)
                IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
                N_DOT_DKDU2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DUDX_GI2  &
@@ -4787,7 +4787,7 @@ END IF
                  +DIFF_GI_BOTH(3,2)*DUOLDDY_GI2+DIFF_GI_BOTH(3,3)*DUOLDDZ_GI2) 
 ! V:
                IDIM=2
-               DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+               DIFF_GI_BOTH=DIFF_GI_ADDED(:,:,IDIM)
                IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
                N_DOT_DKDV2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVDX_GI2  &
@@ -4805,7 +4805,7 @@ END IF
                  +DIFF_GI_BOTH(3,2)*DVOLDDY_GI2+DIFF_GI_BOTH(3,3)*DVOLDDZ_GI2) 
 ! W:
                IDIM=3
-               DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+               DIFF_GI_BOTH=DIFF_GI_ADDED(:,:,IDIM)
                IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
                N_DOT_DKDW2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWDX_GI2  &
@@ -4854,24 +4854,24 @@ END IF
          ! This is the minimum diffusion...
                   DIFF_STAND_DIVDX2_U=8.*( 2.*SNORMXN(SGI)**2*DIFF_GI2(1,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI2(1,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI2(1,3)+DIFF_GI_ADDED(1, 1,1) ) /HDC
+                                   +SNORMZN(SGI)**2*DIFF_GI2(1,3)+DIFF_GI_ADDED(1,1, 1) ) /HDC
 
                   DIFF_STAND_DIVDX2_V=8.*( SNORMXN(SGI)**2*DIFF_GI2(2,1) &
                                       +2.*SNORMYN(SGI)**2*DIFF_GI2(2,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI2(2,3)+DIFF_GI_ADDED(2, 1,1) ) /HDC
+                                   +SNORMZN(SGI)**2*DIFF_GI2(2,3)+DIFF_GI_ADDED(1,1, 2) ) /HDC
 
                   DIFF_STAND_DIVDX2_W=8.*( SNORMXN(SGI)**2*DIFF_GI2(3,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI2(3,2)   &
-                                   +2.*SNORMZN(SGI)**2*DIFF_GI2(3,3)+DIFF_GI_ADDED(3, 1,1) ) /HDC
+                                   +2.*SNORMZN(SGI)**2*DIFF_GI2(3,3)+DIFF_GI_ADDED(1,1, 3) ) /HDC
 ! ENDOF IF(STRESS_FORM) THEN...
                ELSE
                   COEF=&
       SNORMXN(SGI)*(DIFF_GI2(1,1)*SNORMXN(SGI)+ DIFF_GI2(1,2)*SNORMYN(SGI)+DIFF_GI2(1,3)*SNORMZN(SGI))&
      +SNORMYN(SGI)*(DIFF_GI2(2,1)*SNORMXN(SGI)+ DIFF_GI2(2,2)*SNORMYN(SGI)+DIFF_GI2(2,3)*SNORMZN(SGI))&
      +SNORMZN(SGI)*(DIFF_GI2(3,1)*SNORMXN(SGI)+ DIFF_GI2(3,2)*SNORMYN(SGI)+DIFF_GI2(3,3)*SNORMZN(SGI))
-                  DIFF_STAND_DIVDX2_U=8.*( COEF + DIFF_GI_ADDED(1, 1,1) ) /HDC
-                  DIFF_STAND_DIVDX2_V=8.*( COEF + DIFF_GI_ADDED(2, 1,1) ) /HDC
-                  DIFF_STAND_DIVDX2_W=8.*( COEF + DIFF_GI_ADDED(3, 1,1) ) /HDC
+                  DIFF_STAND_DIVDX2_U=8.*( COEF + DIFF_GI_ADDED(1,1, 1) ) /HDC
+                  DIFF_STAND_DIVDX2_V=8.*( COEF + DIFF_GI_ADDED(1,1, 2) ) /HDC
+                  DIFF_STAND_DIVDX2_W=8.*( COEF + DIFF_GI_ADDED(1,1, 3) ) /HDC
 ! ENDOF IF(STRESS_FORM) THEN ELSE...
                ENDIF
 
