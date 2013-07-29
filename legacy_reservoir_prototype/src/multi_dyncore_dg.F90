@@ -2594,8 +2594,13 @@
       ALLOCATE( SDEN(SBCVNGI,NPHASE) )
       ALLOCATE( SDENOLD(SBCVNGI,NPHASE) )
 
-      ALLOCATE( DIFF_COEF_DIVDX( SBCVNGI,NDIM_VEL,NPHASE ) )
-      ALLOCATE( DIFF_COEFOLD_DIVDX( SBCVNGI,NDIM_VEL,NPHASE ) )
+      !ALLOCATE( DIFF_COEF_DIVDX( SBCVNGI,NDIM_VEL,NPHASE ) )
+      !ALLOCATE( DIFF_COEFOLD_DIVDX( SBCVNGI,NDIM_VEL,NPHASE ) )
+
+      ALLOCATE( DIFF_COEF_DIVDX( NDIM_VEL, NPHASE, SBCVNGI ) )
+      ALLOCATE( DIFF_COEFOLD_DIVDX( NDIM_VEL, NPHASE, SBCVNGI ) )
+
+
       ALLOCATE( FTHETA( SBCVNGI,NDIM_VEL,NPHASE ) )
       ALLOCATE( SNDOTQ_IN( SBCVNGI,NDIM_VEL,NPHASE ) )
       ALLOCATE( SNDOTQ_OUT( SBCVNGI,NDIM_VEL,NPHASE ) )
@@ -4511,8 +4516,8 @@ end if
 ! This sub should be used for stress and tensor viscocity replacing the rest...
                    IF(STRESS_FORM) THEN
                      If_GOT_DIFFUS2: IF(GOT_DIFFUS) THEN
-                        CALL DIFFUS_CAL_COEFF_STRESS_OR_TENSOR(DIFF_COEF_DIVDX( SGI,:,IPHASE ), &
-                        DIFF_COEFOLD_DIVDX( SGI,:,IPHASE ), STRESS_FORM, ZERO_OR_TWO_THIRDS, &
+                        CALL DIFFUS_CAL_COEFF_STRESS_OR_TENSOR(DIFF_COEF_DIVDX( :, IPHASE, SGI ), &
+                        DIFF_COEFOLD_DIVDX( :, IPHASE, SGI ), STRESS_FORM, ZERO_OR_TWO_THIRDS, &
                         CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                         SBCVFEN,SBCVNGI,SGI, IPHASE, NDIM, UDIFFUSION, UDIFF_SUF_STAB(:,IPHASE,SGI,:,: ), &
                         HDC, &
@@ -4528,11 +4533,31 @@ end if
                         DWX_ELE, DWY_ELE, DWZ_ELE, DWOLDX_ELE, DWOLDY_ELE, DWOLDZ_ELE, &
                         SELE, STOTEL, WIC_U_BC, WIC_U_BC_DIRICHLET, MAT_OTHER_LOC, CV_SLOC2LOC  )
                      ELSE If_GOT_DIFFUS2
-                        DIFF_COEF_DIVDX( SGI,:,IPHASE )   =0.0
-                        DIFF_COEFOLD_DIVDX( SGI,:,IPHASE )=0.0
+                        DIFF_COEF_DIVDX( :, IPHASE, SGI )   =0.0
+                        DIFF_COEFOLD_DIVDX( :, IPHASE, SGI )=0.0
                      END IF If_GOT_DIFFUS2
                    ENDIF
 ! *************REVIEWER 3-END*************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ! *************REVIEWER 4-START*************
@@ -4543,8 +4568,8 @@ end if
                            ! These subs caculate the effective diffusion coefficient DIFF_COEF_DIVDX,DIFF_COEFOLD_DIVDX
 
                            IF(IDIM==1) THEN
-                              CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( SGI,IDIM,IPHASE ), &
-                                   DIFF_COEFOLD_DIVDX( SGI,IDIM,IPHASE ),  &
+                              CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
+                                   DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
                                    CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                    SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(IDIM,IPHASE,SGI,:,: ), &
                                    HDC, &
@@ -4555,8 +4580,8 @@ end if
                                    SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
                            ENDIF
                            IF(IDIM==2) THEN
-                              CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( SGI,IDIM,IPHASE ), &
-                                   DIFF_COEFOLD_DIVDX( SGI,IDIM,IPHASE ),  &
+                              CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
+                                   DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
                                    CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                    SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(IDIM,IPHASE,SGI,:,: ), &
                                    HDC, &
@@ -4567,8 +4592,8 @@ end if
                                    SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
                            ENDIF
                            IF(IDIM==3) THEN
-                              CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( SGI,IDIM,IPHASE ), &
-                                   DIFF_COEFOLD_DIVDX( SGI,IDIM,IPHASE ),  &
+                              CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
+                                   DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
                                    CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                    SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(IDIM,IPHASE,SGI,:,: ), &
                                    HDC, &
@@ -4579,8 +4604,8 @@ end if
                                    SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
                            ENDIF
                         ELSE ! IF(GOT_DIFFUS) THEN...
-                           DIFF_COEF_DIVDX( SGI,IDIM,IPHASE )   =0.0
-                           DIFF_COEFOLD_DIVDX( SGI,IDIM,IPHASE )=0.0
+                           DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )   =0.0
+                           DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )=0.0
                         END IF If_GOT_DIFFUS
 ! endof if(.not.stress_form) then...
                    ENDIF
@@ -4636,9 +4661,9 @@ end if
                               VLM=VLM+RNN
 
                                  VLM_NEW = VLM_NEW + FTHETA( SGI,IDIM,IPHASE ) * RNN &
-                                   * DIFF_COEF_DIVDX( SGI,IDIM,IPHASE )
+                                   * DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )
                                  VLM_OLD = VLM_OLD + (1.-FTHETA( SGI,IDIM,IPHASE )) * RNN &
-                                   * DIFF_COEFOLD_DIVDX( SGI,IDIM,IPHASE )
+                                   * DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )
 
                               NN_SNDOTQ_IN    = NN_SNDOTQ_IN     + SNDOTQ_IN(SGI,IDIM,IPHASE)    *RNN 
                               NN_SNDOTQ_OUT   = NN_SNDOTQ_OUT    + SNDOTQ_OUT(SGI,IDIM,IPHASE)   *RNN 
