@@ -2601,11 +2601,11 @@
       ALLOCATE( DIFF_COEFOLD_DIVDX( NDIM_VEL, NPHASE, SBCVNGI ) )
 
 
-      ALLOCATE( FTHETA( SBCVNGI,NDIM_VEL,NPHASE ) )
-      ALLOCATE( SNDOTQ_IN( SBCVNGI,NDIM_VEL,NPHASE ) )
-      ALLOCATE( SNDOTQ_OUT( SBCVNGI,NDIM_VEL,NPHASE ) )
-      ALLOCATE( SNDOTQOLD_IN( SBCVNGI,NDIM_VEL,NPHASE ) )
-      ALLOCATE( SNDOTQOLD_OUT( SBCVNGI,NDIM_VEL,NPHASE ) )
+      ALLOCATE( FTHETA( NDIM_VEL,NPHASE,SBCVNGI ) )
+      ALLOCATE( SNDOTQ_IN( NDIM_VEL,NPHASE,SBCVNGI) )
+      ALLOCATE( SNDOTQ_OUT( NDIM_VEL,NPHASE,SBCVNGI) )
+      ALLOCATE( SNDOTQOLD_IN( NDIM_VEL,NPHASE, SBCVNGI) )
+      ALLOCATE( SNDOTQOLD_OUT( NDIM_VEL,NPHASE, SBCVNGI) )
 
       ALLOCATE( XSL(CV_SNLOC) )
       ALLOCATE( YSL(CV_SNLOC) )
@@ -4610,16 +4610,16 @@ end if
 ! endof if(.not.stress_form) then...
                    ENDIF
 
-                        FTHETA( SGI,IDIM,IPHASE )=1.0
+                        FTHETA( IDIM,IPHASE,SGI )=1.0
 
-                        SNDOTQ_IN(SGI,IDIM,IPHASE)    =SNDOTQ_IN(SGI,IDIM,IPHASE)  &
-                             +FTHETA( SGI,IDIM,IPHASE )*SDEN(SGI,IPHASE)*SNDOTQ(SGI,IPHASE)*SINCOME(SGI,IPHASE)
-                        SNDOTQ_OUT(SGI,IDIM,IPHASE)   =SNDOTQ_OUT(SGI,IDIM,IPHASE)  &
-                             +FTHETA( SGI,IDIM,IPHASE )*SDEN(SGI,IPHASE)*SNDOTQ(SGI,IPHASE)*(1.-SINCOME(SGI,IPHASE))
-                        SNDOTQOLD_IN(SGI,IDIM,IPHASE) =SNDOTQOLD_IN(SGI,IDIM,IPHASE)  &
-                             +(1.-FTHETA( SGI,IDIM,IPHASE ))*SDEN(SGI,IPHASE)*SNDOTQOLD(SGI,IPHASE)*SINCOMEOLD(SGI,IPHASE)
-                        SNDOTQOLD_OUT(SGI,IDIM,IPHASE)=SNDOTQOLD_OUT(SGI,IDIM,IPHASE)  &
-                             +(1.-FTHETA( SGI,IDIM,IPHASE ))*SDEN(SGI,IPHASE)*SNDOTQOLD(SGI,IPHASE)*(1.-SINCOMEOLD(SGI,IPHASE))
+                        SNDOTQ_IN(IDIM,IPHASE,SGI)    =SNDOTQ_IN(IDIM,IPHASE,SGI)  &
+                             +FTHETA( IDIM,IPHASE,SGI )*SDEN(SGI,IPHASE)*SNDOTQ(SGI,IPHASE)*SINCOME(SGI,IPHASE)
+                        SNDOTQ_OUT(IDIM,IPHASE,SGI)   =SNDOTQ_OUT(IDIM,IPHASE,SGI)  &
+                             +FTHETA( IDIM,IPHASE,SGI )*SDEN(SGI,IPHASE)*SNDOTQ(SGI,IPHASE)*(1.-SINCOME(SGI,IPHASE))
+                        SNDOTQOLD_IN(IDIM,IPHASE,SGI) =SNDOTQOLD_IN(IDIM,IPHASE,SGI)  &
+                             +(1.-FTHETA( IDIM,IPHASE,SGI ))*SDEN(SGI,IPHASE)*SNDOTQOLD(SGI,IPHASE)*SINCOMEOLD(SGI,IPHASE)
+                        SNDOTQOLD_OUT(IDIM,IPHASE,SGI)=SNDOTQOLD_OUT(IDIM,IPHASE,SGI)  &
+                             +(1.-FTHETA( IDIM,IPHASE,SGI ))*SDEN(SGI,IPHASE)*SNDOTQOLD(SGI,IPHASE)*(1.-SINCOMEOLD(SGI,IPHASE))
 
                      END DO
                   END DO
@@ -4660,15 +4660,15 @@ end if
 
                               VLM=VLM+RNN
 
-                                 VLM_NEW = VLM_NEW + FTHETA( SGI,IDIM,IPHASE ) * RNN &
+                                 VLM_NEW = VLM_NEW + FTHETA( IDIM,IPHASE,SGI ) * RNN &
                                    * DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )
-                                 VLM_OLD = VLM_OLD + (1.-FTHETA( SGI,IDIM,IPHASE )) * RNN &
+                                 VLM_OLD = VLM_OLD + (1.-FTHETA( IDIM,IPHASE,SGI )) * RNN &
                                    * DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )
 
-                              NN_SNDOTQ_IN    = NN_SNDOTQ_IN     + SNDOTQ_IN(SGI,IDIM,IPHASE)    *RNN 
-                              NN_SNDOTQ_OUT   = NN_SNDOTQ_OUT    + SNDOTQ_OUT(SGI,IDIM,IPHASE)   *RNN 
-                              NN_SNDOTQOLD_IN = NN_SNDOTQOLD_IN  + SNDOTQOLD_IN(SGI,IDIM,IPHASE) *RNN 
-                              NN_SNDOTQOLD_OUT= NN_SNDOTQOLD_OUT + SNDOTQOLD_OUT(SGI,IDIM,IPHASE)*RNN 
+                              NN_SNDOTQ_IN    = NN_SNDOTQ_IN     + SNDOTQ_IN(IDIM,IPHASE,SGI)    *RNN 
+                              NN_SNDOTQ_OUT   = NN_SNDOTQ_OUT    + SNDOTQ_OUT(IDIM,IPHASE,SGI)   *RNN 
+                              NN_SNDOTQOLD_IN = NN_SNDOTQOLD_IN  + SNDOTQOLD_IN(IDIM,IPHASE,SGI) *RNN 
+                              NN_SNDOTQOLD_OUT= NN_SNDOTQOLD_OUT + SNDOTQOLD_OUT(IDIM,IPHASE,SGI)*RNN 
 
                            END DO
 
