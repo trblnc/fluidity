@@ -32,15 +32,17 @@ module solvers_module
   use fldebug
   use sparse_tools_petsc
   use solvers
+  use state_module
   use fields
   use global_parameters, only: OPTION_PATH_LEN
   use spud
+  use boundary_conditions
 
   implicit none
     
   private
   
-  public  :: solver, PRES_DG_MULTIGRID
+  public  :: solver, PRES_DG_MULTIGRID, strong_bc_solver
   
   interface solver
      module procedure solve_via_copy_to_petsc_csr_matrix
@@ -131,7 +133,128 @@ contains
       
   end subroutine solve_via_copy_to_petsc_csr_matrix
 
+subroutine strong_bc_solver(state,A, &
+                                                x, &
+                                                b, &
+                                                findfe, &
+                                                colfe, &
+                                                option_path)
+  
+     !!< Solve a matrix Ax = b system via copying over to the
+     !!< petsc_csr_matrix type and calling the femtools solver
+     !!< using the spud options given by the field options path
+     
+    type(state_type), dimension(:) :: state
+    integer, dimension(:), intent(in) :: findfe 
+    integer, dimension(:), intent(in) :: colfe
+    real, dimension(:), intent(in) :: a
+    real, dimension(:), intent(inout), target ::b
+    real, dimension(:), intent(inout), target :: x
+    character(len=*), intent(in) :: option_path
+    
+    ! local variables
+    real, dimension(size(x)), target :: bb,xx
+    integer :: i,j,k,n,p
+    integer :: rows, phases, dim
+    integer, dimension(:), allocatable :: dnnz
+    type(petsc_csr_matrix) :: matrix
+    type(vector_field) :: rhs
+    type(vector_field) :: solution
 
+    type(vector_field), pointer :: velocity
+    character(len=FIELD_NAME_LEN):: bctype
+    integer, dimension(:), pointer:: surface_node_list
+    
+
+    phases=size(state)-option_count('/material_phase/is_multiphase_component')
+    velocity=>extract_vector_field(state(1),"Velocity")
+    rows = node_count(velocity)
+    dim=velocity%dim
+    
+    ewrite(3,*) size(x)+1, size(findfe)
+
+    assert(size(x) == size(b))
+    assert(size(a) == size(colfe))
+    assert((size(x)+1) == size(findfe))
+
+    ! find the number of non zeros per row
+    allocate(dnnz(dim*phases*rows)) ; dnnz = 0
+    do i = 1,dim*phases*rows
+       dnnz(i) = (findfe(i+1) - findfe(i))
+    end do
+    
+    ! allocate the petsc_csr_matrix using nnz (pass dnnz also for onnz) 
+    call allocate(matrix, rows, rows, dnnz, dnnz, (/phases*dim,phases*dim/), name = 'dummy')
+    call zero(matrix)
+    
+    ! add in the entries to petsc matrix
+    do p=0,phases-1
+       do n=0,dim-1
+          do i = 1, rows
+             do j = findfe(i+n*rows+p*dim*rows), findfe(i+n*rows+p*dim*rows+1) - 1
+                k = colfe(j)
+                call addto( matrix, blocki = p*dim+n+1, blockj = (k-1)/(rows)+1, i = i, j = modulo(k-1,rows)+1, val = a(j) )
+             end do
+          end do
+       end do
+    end do
+
+ call assemble(matrix)    
+
+    p=0
+    do i=1,size(state)
+       if (have_option(trim(state(i)%option_path)//'/is_multiphase_component')) cycle
+       velocity=>extract_vector_field(state(i),"Velocity")
+       p=p+1
+       do j=1, get_boundary_condition_count(velocity)
+          call get_boundary_condition(velocity, j, type=bctype, &
+               surface_node_list=surface_node_list)
+          if (bctype/="strong_no_slip") cycle
+          do n=1,dim
+             call zero_rows(matrix,(p-1)*dim+n,surface_node_list,1.0)
+             x((p-1)*dim+(n-1)+surface_node_list)=0.0
+             b((p-1)*dim+(n-1)+surface_node_list)=0.0
+          end do
+       end do
+    end do
+
+
+    
+    ! Set up rhs and initial guess which are scalar field types.
+    rhs%dim=dim*phases
+    solution%dim=dim*phases
+        
+
+    do i=0,phases*dim-1
+       do j=0,rows-1
+          xx(i+phases*dim*j+1)=x(i*rows+j+1)
+          bb(i+phases*dim*j+1)=b(i*rows+j+1)
+       end do
+    end do
+
+    rhs%val(1:dim*phases,1:rows)=>bb
+    solution%val(1:dim*phases,1:rows)=>xx
+
+
+
+        
+    ! solve matrix
+    call petsc_solve(solution, &
+                     matrix, &
+                     rhs, &
+                     option_path = trim(option_path)) 
+    
+    do i=0,phases*dim-1
+       do j=0,rows-1
+          x(i*rows+j+1)=xx(i+phases*dim*j+1)
+       end do
+    end do
+
+    ! deallocate as needed
+    deallocate(dnnz)    
+    call deallocate(matrix)
+      
+  end subroutine strong_bc_solver
 
 
   SUBROUTINE PRES_DG_MULTIGRID(CMC, CMC_PRECON, IGOT_CMC_PRECON, P, RHS, &

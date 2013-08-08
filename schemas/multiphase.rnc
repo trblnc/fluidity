@@ -1220,7 +1220,7 @@ velocity_boundary_conditions =
          element type{
             attribute name { "outflow" }
          }|
-         ## Momentun BC
+         ## Momentum BC
          ##
          ## Should be used in combination with the near_wall_treatment condition.
          ## When activated wall treatment is not applied on the wall-outflow edge.
@@ -1228,6 +1228,13 @@ velocity_boundary_conditions =
             attribute name { "momentum" },
             velocity_components_choice,
             element boundary { ( "incoming" | "open" ) }
+         }|
+	 ## Strong No Slip
+         ##
+         ## Apply no slip condition strongly in the velocity solve
+	 ## TESTING FOR MULTIPHASE
+         element type{
+            attribute name { "strong_no_slip" }
          }
       )
    )

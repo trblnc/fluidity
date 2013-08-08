@@ -128,6 +128,10 @@ module sparse_tools_petsc
      module procedure petsc_csr_zero
   end interface
 
+  interface zero_rows
+     module procedure petsc_csr_zero_block_rows
+  end interface zero_rows
+
   interface addto
      module procedure petsc_csr_addto, petsc_csr_vaddto, &
        petsc_csr_blocks_addto_withmask, petsc_csr_block_addto, &
@@ -172,7 +176,7 @@ module sparse_tools_petsc
      zero, addto, addto_diag, scale, &
      extract_diagonal, assemble, incref_petsc_csr_matrix, &
      ptap, mult, mult_T, dump_matrix, &
-     csr2petsc_csr, dump_petsc_csr_matrix
+     csr2petsc_csr, dump_petsc_csr_matrix,zero_rows
 
 contains
 
@@ -727,6 +731,27 @@ contains
     matrix%is_assembled=.true.
     
   end subroutine petsc_csr_zero
+
+  subroutine petsc_csr_zero_block_rows(matrix, blocki, rows , diag, x, b)
+    type(petsc_csr_matrix), intent(inout) :: matrix
+    integer, intent(in) :: blocki
+    integer, intent(in), dimension(:) :: rows
+    real :: diag
+    Vec , optional :: x, b
+
+    PetscErrorCode:: ierr
+    PetscInt, dimension(size(rows)) :: PetscRows
+
+    PetscRows=matrix%row_numbering%gnn2unn(rows,blocki)
+
+    if (present(x)) then
+       call MatZeroRows(matrix%M,size(PetscRows),PetscRows,diag, x,b,ierr)
+    else
+       call MatZeroRows(matrix%M,size(PetscRows),PetscRows, diag, ierr)
+    end if
+
+
+  end subroutine petsc_csr_zero_block_rows
   
   subroutine petsc_csr_addto(matrix, blocki, blockj, i, j, val)
     !!< Add value to matrix(blocki, blockj, i,j)

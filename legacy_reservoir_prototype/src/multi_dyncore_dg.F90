@@ -1170,7 +1170,11 @@
             !ewrite(3,*)  'dgm_pha', dgm_pha
 
             UP_VEL=0.0
-            CALL SOLVER( DGM_PHA, UP_VEL, U_RHS_CDP, &
+!            CALL SOLVER( DGM_PHA, UP_VEL, U_RHS_CDP, &
+!                 FINDGM_PHA, COLDGM_PHA, &
+!                 option_path = '/material_phase[0]/vector_field::Velocity')
+
+            call strong_bc_solver(state,DGM_PHA, UP_VEL, U_RHS_CDP, &
                  FINDGM_PHA, COLDGM_PHA, &
                  option_path = '/material_phase[0]/vector_field::Velocity')
 

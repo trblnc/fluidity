@@ -1558,7 +1558,7 @@ When activated wall treatment is not applied on the wall-outflow edge.</a:docume
         </attribute>
       </element>
       <element name="type">
-        <a:documentation>Momentun BC
+        <a:documentation>Momentum BC
 
 Should be used in combination with the near_wall_treatment condition.
 When activated wall treatment is not applied on the wall-outflow edge.</a:documentation>
@@ -1572,6 +1572,15 @@ When activated wall treatment is not applied on the wall-outflow edge.</a:docume
             <value>open</value>
           </choice>
         </element>
+      </element>
+      <element name="type">
+        <a:documentation>Strong No Slip
+
+Apply no slip condition strongly in the velocity solve
+TESTING FOR MULTIPHASE</a:documentation>
+        <attribute name="name">
+          <value>strong_no_slip</value>
+        </attribute>
       </element>
     </choice>
   </define>
