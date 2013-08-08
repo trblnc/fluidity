@@ -32,6 +32,7 @@
 
     use solvers_module
     use spud
+    use fields
     use global_parameters, only: option_path_len
     use futils, only: int2str
 
@@ -72,7 +73,8 @@
          MEAN_PORE_CV, &
          FINDCMC, COLCMC, NCOLCMC, MASS_MN_PRES, THERMAL, &
          MASS_ELE_TRANSP, &
-         option_path_spatial_discretisation )
+         option_path_spatial_discretisation,&
+      solid_source)
 
       !  =====================================================================
       !     In this subroutine the advection terms in the advection-diffusion
@@ -354,11 +356,22 @@
       INTEGER :: IDUM(1)
       REAL :: RDUM(1),n1,n2,n3
 
+      logical solid_phase(nphase)
+      type(scalar_field_pointer), dimension(nphase), optional :: solid_source
+
       overlapping = .false.
       call get_option( '/geometry/mesh::VelocityMesh/from_mesh/mesh_shape/element_type', &
            overlapping_path )
       if( trim( overlapping_path ) == 'overlapping' ) overlapping = .true.
 
+      solid_phase=.false.
+      if (present(solid_source)) then
+         do iphase=1,nphase
+            if (associated(solid_source(iphase)%ptr)) then
+               solid_phase(iphase)=.true.
+            end if
+         end do
+      end if
 
       IDUM = 0
       RDUM = 0.
@@ -1320,7 +1333,7 @@
 
                         ! this is for the internal energy equation source term..
                         ! - p \div u
-                        IF( THERMAL ) THEN
+                        IF( THERMAL .and. .not. solid_phase(iphase) ) THEN
                            THERM_FTHETA = 1.
 
                            if( igot_t2 /= 0 ) then
@@ -1335,7 +1348,26 @@
                                    + ( 1. - THERM_FTHETA ) * NDOTQOLD )
                            end if
 
+                        elseif ( solid_phase(iphase)) then
+
+                           THERM_FTHETA = 1.
+
+                           if( igot_t2 /= 0 ) then
+                              CV_RHS( CV_NODI_IPHA ) = CV_RHS( CV_NODI_IPHA ) &
+                                   - solid_source(iphase)%ptr%val(CV_NODI) * SCVDETWEI( GI ) * ( &
+                                   THERM_FTHETA * NDOTQNEW * LIMT2 & 
+                                   + ( 1. - THERM_FTHETA ) * NDOTQOLD * LIMT2OLD )
+                           else
+                              CV_RHS( CV_NODI_IPHA ) = CV_RHS( CV_NODI_IPHA ) &
+                                   -  solid_source(iphase)%ptr%val(CV_NODI) * SCVDETWEI( GI ) * ( &
+                                   THERM_FTHETA * NDOTQNEW & 
+                                   + ( 1. - THERM_FTHETA ) * NDOTQOLD )
+                           end if
+
                         END IF
+
+
+
 
                      ENDIF Conditional_GETCV_DISC
 
@@ -4583,10 +4615,13 @@
             DIFF_GI=MAX(0.0, DIFF_GI) 
 
 
+            DIFF_GI_BOTH=0.0
+
 ! U:
             IDIM=1
-            DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
-            IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
+            DIFF_GI_BOTH(1:NDIM,1:NDIM)=DIFF_GI_ADDED(IDIM,:,:)
+            IF(.NOT.STRESS_FORM) DIFF_GI_BOTH(:,:)=DIFF_GI_BOTH(:,:)+DIFF_GI(:,:)
+
 
             N_DOT_DKDU=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DUDX_GI+DIFF_GI_BOTH(1,2)*DUDY_GI+DIFF_GI_BOTH(1,3)*DUDZ_GI) &
                       +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DUDX_GI+DIFF_GI_BOTH(2,2)*DUDY_GI+DIFF_GI_BOTH(2,3)*DUDZ_GI) &
@@ -4600,24 +4635,31 @@
               +DIFF_GI_BOTH(3,2)*DUOLDDY_GI+DIFF_GI_BOTH(3,3)*DUOLDDZ_GI)
 
 ! V:
-            IDIM=2
-            DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
-            IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
+            if (ndim>1) then
+               IDIM=2
+               DIFF_GI_BOTH(1:NDIM,1:NDIM)=DIFF_GI_ADDED(IDIM,:,:)
+               IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
+               
+               N_DOT_DKDV=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVDX_GI+DIFF_GI_BOTH(1,2)*DVDY_GI+DIFF_GI_BOTH(1,3)*DVDZ_GI) &
+                    +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVDX_GI+DIFF_GI_BOTH(2,2)*DVDY_GI+DIFF_GI_BOTH(2,3)*DVDZ_GI) &
+                    +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVDX_GI+DIFF_GI_BOTH(3,2)*DVDY_GI+DIFF_GI_BOTH(3,3)*DVDZ_GI) 
 
-            N_DOT_DKDV=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVDX_GI+DIFF_GI_BOTH(1,2)*DVDY_GI+DIFF_GI_BOTH(1,3)*DVDZ_GI) &
-                      +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVDX_GI+DIFF_GI_BOTH(2,2)*DVDY_GI+DIFF_GI_BOTH(2,3)*DVDZ_GI) &
-                      +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVDX_GI+DIFF_GI_BOTH(3,2)*DVDY_GI+DIFF_GI_BOTH(3,3)*DVDZ_GI) 
+               N_DOT_DKDVOLD=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVOLDDX_GI  &
+                    +DIFF_GI_BOTH(1,2)*DVOLDDY_GI+DIFF_GI_BOTH(1,3)*DVOLDDZ_GI) &
+                    +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVOLDDX_GI  &
+                    +DIFF_GI_BOTH(2,2)*DVOLDDY_GI+DIFF_GI_BOTH(2,3)*DVOLDDZ_GI) &
+                    +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVOLDDX_GI  &
+                    +DIFF_GI_BOTH(3,2)*DVOLDDY_GI+DIFF_GI_BOTH(3,3)*DVOLDDZ_GI)
 
-            N_DOT_DKDVOLD=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVOLDDX_GI  &
-              +DIFF_GI_BOTH(1,2)*DVOLDDY_GI+DIFF_GI_BOTH(1,3)*DVOLDDZ_GI) &
-              +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVOLDDX_GI  &
-              +DIFF_GI_BOTH(2,2)*DVOLDDY_GI+DIFF_GI_BOTH(2,3)*DVOLDDZ_GI) &
-              +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVOLDDX_GI  &
-              +DIFF_GI_BOTH(3,2)*DVOLDDY_GI+DIFF_GI_BOTH(3,3)*DVOLDDZ_GI)
-
+            else
+               N_DOT_DKDV=0.0
+               N_DOT_DKDVOLD=0.0
+            end if
 ! W:
+
+            if (ndim==3) then
             IDIM=3
-            DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+            DIFF_GI_BOTH(1:NDIM,1:NDIM)=DIFF_GI_ADDED(IDIM,:,:)
             IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
             N_DOT_DKDW=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWDX_GI+DIFF_GI_BOTH(1,2)*DWDY_GI+DIFF_GI_BOTH(1,3)*DWDZ_GI) &
@@ -4630,6 +4672,12 @@
               +DIFF_GI_BOTH(2,2)*DWOLDDY_GI+DIFF_GI_BOTH(2,3)*DWOLDDZ_GI) &
               +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DWOLDDX_GI  &
               +DIFF_GI_BOTH(3,2)*DWOLDDY_GI+DIFF_GI_BOTH(3,3)*DWOLDDZ_GI)
+
+            else
+               N_DOT_DKDW=0.0
+               N_DOT_DKDWOLD=0.0
+            end if
+               
 
 
             IF(STRESS_FORM) THEN
@@ -4666,13 +4714,21 @@
                                       +SNORMYN(SGI)**2*DIFF_GI(1,2)   &
                                    +SNORMZN(SGI)**2*DIFF_GI(1,3)+DIFF_GI_ADDED(1, 1,1) ) /HDC
 
+               if (ndim>1) then
                DIFF_STAND_DIVDX_V=8.*( SNORMXN(SGI)**2*DIFF_GI(2,1) &
                                       +2.*SNORMYN(SGI)**2*DIFF_GI(2,2)   &
                                    +SNORMZN(SGI)**2*DIFF_GI(2,3)+DIFF_GI_ADDED(2, 1,1) ) /HDC
+               else
+                  DIFF_STAND_DIVDX_V=0.0
+               end if
 
-               DIFF_STAND_DIVDX_W=8.*( SNORMXN(SGI)**2*DIFF_GI(3,1) &
+               if (ndim==3) then
+                  DIFF_STAND_DIVDX_W=8.*( SNORMXN(SGI)**2*DIFF_GI(3,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI(3,2)   &
                                    +2.*SNORMZN(SGI)**2*DIFF_GI(3,3)+DIFF_GI_ADDED(3, 1,1) ) /HDC
+               else
+                  DIFF_STAND_DIVDX_W=0.0
+               end if
 ! ENDOF IF(STRESS_FORM) THEN...
             ELSE
                COEF=&
@@ -4754,7 +4810,7 @@
 
 ! U:
                IDIM=1
-               DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
+               DIFF_GI_BOTH(1:NDIM,1:NDIM)=DIFF_GI_ADDED(IDIM,:,:)
                IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
                N_DOT_DKDU2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DUDX_GI2  &
@@ -4771,41 +4827,54 @@
                  +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DUOLDDX_GI2  &
                  +DIFF_GI_BOTH(3,2)*DUOLDDY_GI2+DIFF_GI_BOTH(3,3)*DUOLDDZ_GI2) 
 ! V:
-               IDIM=2
-               DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
-               IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
-               N_DOT_DKDV2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVDX_GI2  &
-                 +DIFF_GI_BOTH(1,2)*DVDY_GI2+DIFF_GI_BOTH(1,3)*DVDZ_GI2) &
-                 +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVDX_GI2  &
-                 +DIFF_GI_BOTH(2,2)*DVDY_GI2+DIFF_GI_BOTH(2,3)*DVDZ_GI2) &
-                 +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVDX_GI2  &
-                 +DIFF_GI_BOTH(3,2)*DVDY_GI2+DIFF_GI_BOTH(3,3)*DVDZ_GI2) 
+               if (ndim>1) then
+                  IDIM=2
+                  DIFF_GI_BOTH(1:NDIM,1:NDIM)=DIFF_GI_ADDED(IDIM,:,:)
+                  IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
-               N_DOT_DKDVOLD2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVOLDDX_GI2  &
-                 +DIFF_GI_BOTH(1,2)*DVOLDDY_GI2+DIFF_GI_BOTH(1,3)*DVOLDDZ_GI2) &
-                 +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVOLDDX_GI2  &
-                 +DIFF_GI_BOTH(2,2)*DVOLDDY_GI2+DIFF_GI_BOTH(2,3)*DVOLDDZ_GI2) &
-                 +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVOLDDX_GI2  &
-                 +DIFF_GI_BOTH(3,2)*DVOLDDY_GI2+DIFF_GI_BOTH(3,3)*DVOLDDZ_GI2) 
+                  N_DOT_DKDV2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVDX_GI2  &
+                       +DIFF_GI_BOTH(1,2)*DVDY_GI2+DIFF_GI_BOTH(1,3)*DVDZ_GI2) &
+                       +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVDX_GI2  &
+                       +DIFF_GI_BOTH(2,2)*DVDY_GI2+DIFF_GI_BOTH(2,3)*DVDZ_GI2) &
+                       +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVDX_GI2  &
+                       +DIFF_GI_BOTH(3,2)*DVDY_GI2+DIFF_GI_BOTH(3,3)*DVDZ_GI2) 
+
+                  N_DOT_DKDVOLD2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DVOLDDX_GI2  &
+                       +DIFF_GI_BOTH(1,2)*DVOLDDY_GI2+DIFF_GI_BOTH(1,3)*DVOLDDZ_GI2) &
+                       +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DVOLDDX_GI2  &
+                       +DIFF_GI_BOTH(2,2)*DVOLDDY_GI2+DIFF_GI_BOTH(2,3)*DVOLDDZ_GI2) &
+                       +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DVOLDDX_GI2  &
+                       +DIFF_GI_BOTH(3,2)*DVOLDDY_GI2+DIFF_GI_BOTH(3,3)*DVOLDDZ_GI2) 
+               else
+                  N_DOT_DKDV2=0.0
+                  N_DOT_DKDVOLD2=0.0
+               endif
 ! W:
-               IDIM=3
-               DIFF_GI_BOTH=DIFF_GI_ADDED(IDIM,:,:)
-               IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
-               N_DOT_DKDW2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWDX_GI2  &
-                 +DIFF_GI_BOTH(1,2)*DWDY_GI2+DIFF_GI_BOTH(1,3)*DWDZ_GI2) &
-                 +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DWDX_GI2  &
-                 +DIFF_GI_BOTH(2,2)*DWDY_GI2+DIFF_GI_BOTH(2,3)*DWDZ_GI2) &
-                 +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DWDX_GI2  &
-                 +DIFF_GI_BOTH(3,2)*DWDY_GI2+DIFF_GI_BOTH(3,3)*DWDZ_GI2) 
+               if (ndim==3) then
+                  IDIM=3
+                  DIFF_GI_BOTH(1:NDIM,1:NDIM)=DIFF_GI_ADDED(IDIM,:,:)
+                  IF(.NOT.STRESS_FORM) DIFF_GI_BOTH=DIFF_GI_BOTH+DIFF_GI
 
-               N_DOT_DKDWOLD2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWOLDDX_GI2  &
-                 +DIFF_GI_BOTH(1,2)*DWOLDDY_GI2+DIFF_GI_BOTH(1,3)*DWOLDDZ_GI2) &
-                 +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DWOLDDX_GI2  &
-                 +DIFF_GI_BOTH(2,2)*DWOLDDY_GI2+DIFF_GI_BOTH(2,3)*DWOLDDZ_GI2) &
-                 +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DWOLDDX_GI2  &
-                 +DIFF_GI_BOTH(3,2)*DWOLDDY_GI2+DIFF_GI_BOTH(3,3)*DWOLDDZ_GI2) 
+                  N_DOT_DKDW2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWDX_GI2  &
+                       +DIFF_GI_BOTH(1,2)*DWDY_GI2+DIFF_GI_BOTH(1,3)*DWDZ_GI2) &
+                       +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DWDX_GI2  &
+                       +DIFF_GI_BOTH(2,2)*DWDY_GI2+DIFF_GI_BOTH(2,3)*DWDZ_GI2) &
+                       +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DWDX_GI2  &
+                       +DIFF_GI_BOTH(3,2)*DWDY_GI2+DIFF_GI_BOTH(3,3)*DWDZ_GI2) 
+
+                  N_DOT_DKDWOLD2=SNORMXN(SGI)*(DIFF_GI_BOTH(1,1)*DWOLDDX_GI2  &
+                       +DIFF_GI_BOTH(1,2)*DWOLDDY_GI2+DIFF_GI_BOTH(1,3)*DWOLDDZ_GI2) &
+                       +SNORMYN(SGI)*(DIFF_GI_BOTH(2,1)*DWOLDDX_GI2  &
+                       +DIFF_GI_BOTH(2,2)*DWOLDDY_GI2+DIFF_GI_BOTH(2,3)*DWOLDDZ_GI2) &
+                       +SNORMZN(SGI)*(DIFF_GI_BOTH(3,1)*DWOLDDX_GI2  &
+                       +DIFF_GI_BOTH(3,2)*DWOLDDY_GI2+DIFF_GI_BOTH(3,3)*DWOLDDZ_GI2) 
+
+               else
+                  N_DOT_DKDW2=0.0
+                  N_DOT_DKDWOLD2=0.0
+               endif
 
 
                IF(STRESS_FORM) THEN
@@ -4841,13 +4910,21 @@
                                       +SNORMYN(SGI)**2*DIFF_GI2(1,2)   &
                                    +SNORMZN(SGI)**2*DIFF_GI2(1,3)+DIFF_GI_ADDED(1, 1,1) ) /HDC
 
-                  DIFF_STAND_DIVDX2_V=8.*( SNORMXN(SGI)**2*DIFF_GI2(2,1) &
-                                      +2.*SNORMYN(SGI)**2*DIFF_GI2(2,2)   &
-                                   +SNORMZN(SGI)**2*DIFF_GI2(2,3)+DIFF_GI_ADDED(2, 1,1) ) /HDC
+                  if (ndim>1) then
+                     DIFF_STAND_DIVDX2_V=8.*( SNORMXN(SGI)**2*DIFF_GI2(2,1) &
+                          +2.*SNORMYN(SGI)**2*DIFF_GI2(2,2)   &
+                          +SNORMZN(SGI)**2*DIFF_GI2(2,3)+DIFF_GI_ADDED(2, 1,1) ) /HDC
+                  else
+                     DIFF_STAND_DIVDX2_V=0.0
+                  end if
 
-                  DIFF_STAND_DIVDX2_W=8.*( SNORMXN(SGI)**2*DIFF_GI2(3,1) &
+                  if (ndim==3) then
+                     DIFF_STAND_DIVDX2_W=8.*( SNORMXN(SGI)**2*DIFF_GI2(3,1) &
                                       +SNORMYN(SGI)**2*DIFF_GI2(3,2)   &
-                                   +2.*SNORMZN(SGI)**2*DIFF_GI2(3,3)+DIFF_GI_ADDED(3, 1,1) ) /HDC
+                                      +2.*SNORMZN(SGI)**2*DIFF_GI2(3,3)+DIFF_GI_ADDED(3, 1,1) ) /HDC
+                  else
+                     DIFF_STAND_DIVDX2_W=0.0
+                  end if
 ! ENDOF IF(STRESS_FORM) THEN...
                ELSE
                   COEF=&

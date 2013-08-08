@@ -467,6 +467,18 @@ start =
                   }?
                )               
             }?,
+	    element scalar_field {
+	            attribute name { "RadialDistributionFunction" },
+		    element diagnostic {
+		          pressure_mesh_choice,	
+			  internal_algorithm
+			  }, 
+	    	    element function{
+		    	    attribute name { "Gidaspow" }
+			    },
+		    element maximum_phase_volume_fraction { real },
+		    field_output_options
+	    }?,
             ## Scale the momentum equation by the volume fraction for when some problems are not well poised.
             element scale_momentum_by_volume_fraction {empty}?,
             ## The equation of state
@@ -582,6 +594,13 @@ start =
 			 element coefficient{real},
 			 comment
 		   }|
+		    element drag {
+		        ## Options controlling form of drag terms for dispersed fluid-particle interactions
+			 attribute name { "Bilinear" },
+			 element diameter {real},
+			 element coefficient{real},
+			 comment
+		   }|
 		   element drag {
 		        ## Options controlling form of drag terms for dispersed fluid-particle interactions
 			 attribute name { "Quadratic" },
@@ -600,7 +619,30 @@ start =
 			 element diameter {real},
 			 element coefficient{real},
 			 comment
-		   }
+		   }|element drag {
+		        ## Options controlling form of drag terms for dispersed fluid-particle interactions
+			 attribute name { "python_function" },
+			 element function {
+	 		 	  python_code
+		         },	  			  
+			element argument {
+			    attribute name { xsd:string },
+	    		(
+	    		element type {
+	      	   	    attribute name { "scalar_field"}
+	    		}|
+	    		element type {
+	      	   	    attribute name { "vector_field"}
+            		}|
+            		element type {	
+                   	    attribute name { "tensor_field"}
+	    		}),
+	    		element material_phase {
+		   	   attribute name {xsd:string}
+			}?
+	    		}+,
+			comment
+			}
 	       )?, 			 
                ## Option for capillary pressure
                element capillary_pressure {

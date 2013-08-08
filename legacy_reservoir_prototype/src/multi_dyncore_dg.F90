@@ -44,6 +44,7 @@
     use spact
     use Copy_Outof_State
     use fldebug
+    use granular_flow
 
     implicit none
 
@@ -134,7 +135,7 @@
       REAL, DIMENSION( CV_NONODS * NPHASE * IGOT_T2 ), intent( inout ) :: THETA_GDIFF
       REAL, DIMENSION( TOTELE * IGOT_THETA_FLUX, CV_NLOC, SCVNGI_THETA, NPHASE ), &
            intent( inout ) :: THETA_FLUX, ONE_M_THETA_FLUX
-      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( in ) :: TDIFFUSION
+      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( inout ) :: TDIFFUSION
       INTEGER, intent( in ) :: T_DISOPT, T_DG_VEL_INT_OPT
       REAL, intent( in ) :: DT, T_THETA
       REAL, intent( in ) :: T_BETA
@@ -146,8 +147,8 @@
       REAL, DIMENSION( STOTEL * CV_SNLOC * NPHASE * IGOT_T2 ), intent( in ) :: SUF_T2_BC_ROB1, SUF_T2_BC_ROB2
       REAL, DIMENSION( CV_NONODS*NPHASE ), intent( in ) :: DERIV
       REAL, DIMENSION( CV_NONODS ), intent( in ) :: P
-      REAL, DIMENSION( CV_NONODS * NPHASE ), intent( in ) :: T_SOURCE
-      REAL, DIMENSION( CV_NONODS, NPHASE, NPHASE ), intent( in ) :: T_ABSORB
+      REAL, DIMENSION( CV_NONODS * NPHASE ), intent( inout ) :: T_SOURCE
+      REAL, DIMENSION( CV_NONODS, NPHASE, NPHASE ), intent( inout ) :: T_ABSORB
       REAL, DIMENSION( TOTELE ), intent( in ) :: VOLFRA_PORE
       INTEGER, DIMENSION( CV_NONODS + 1 ), intent( in ) :: FINDM
       INTEGER, DIMENSION( NCOLM ), intent( in ) :: COLM
@@ -171,6 +172,7 @@
       REAL :: SECOND_THETA
       INTEGER :: STAT
       character( len = option_path_len ) :: path
+      type(scalar_field_pointer), dimension(nphase) :: solid_source
 
 
       ALLOCATE( ACV( NCOLACV ))
@@ -201,6 +203,18 @@
          call get_option( path, second_theta, default=1. )
 
       end if
+
+      do iphase=1,nphase
+         if (has_scalar_field(state(iphase),"RadialDistributionFunction")) then
+            t_absorb(:,:,iphase)=0.0
+            call calculate_solid_absorbtion(state(nphase),t_absorb(:,iphase,iphase),solid_source(iphase))
+            call calculate_solid_energy_source(state,iphase,t_absorb(:,iphase,iphase),t_source(CV_NONODS*(iphase-1)+1:CV_NONODS*iphase))
+            tdiffusion(:,:,:,iphase)=0.0
+            call calculate_solid_diffusion(state,nphase,tdiffusion(:,:,:,iphase))
+         else
+            nullify(solid_source(iphase)%ptr)
+         end if
+      end do
 
       lump_eqns = have_option( '/material_phase[0]/scalar_field::PhaseVolumeFraction/prognostic/' // &
            'spatial_discretisation/continuous_galerkin/mass_terms/lump_mass_matrix' )
@@ -274,7 +288,7 @@
                  MEAN_PORE_CV, &
                  FINACV, COLACV, NCOLACV, ACV, THERMAL, &
                  mass_ele_transp, &
-                 option_path )
+                 option_path, solid_source=solid_source )
          end if
 
          t=0.
@@ -334,6 +348,14 @@
       DEALLOCATE( DIAG_SCALE_PRES )
       DEALLOCATE( CT_RHS )
       DEALLOCATE( CT )
+
+      do iphase=1,nphase
+         if (associated(solid_source(iphase)%ptr)) then
+            call deallocate(solid_source(iphase)%ptr)
+            deallocate(solid_source(iphase)%ptr)
+            nullify(solid_source(iphase)%ptr)
+         end if
+      end do
 
       ewrite(3,*)'t:', t
       ewrite(3,*)'told:', told
@@ -630,7 +652,7 @@
            RDUM, JUST_BL_DIAG_MAT,  &
            TDIFFUSION, & ! TDiffusion need to be obtained down in the tree according to the option_path
            IPLIKE_GRAD_SOU, RZERO, RZERO, &
-           RZERO,.FALSE.,1 )
+           RZERO,.FALSE.,1,.false. )
 
 
     END SUBROUTINE WRAPPER_ASSEMB_FORCE_CTY
@@ -1006,7 +1028,7 @@
       INTEGER, DIMENSION( NCOLM ), intent( in ) :: COLM
       INTEGER, DIMENSION( CV_NONODS ), intent( in ) :: MIDM 
       REAL, DIMENSION( CV_NONODS * NPHASE ), intent( in ) :: UDEN, UDENOLD
-      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( in ) :: UDIFFUSION 
+      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( inout ) :: UDIFFUSION 
       REAL, DIMENSION( NOPT_VEL_UPWIND_COEFS ), intent( in ) :: OPT_VEL_UPWIND_COEFS
       REAL, DIMENSION( TOTELE * IGOT_THETA_FLUX, CV_NLOC, SCVNGI_THETA, NPHASE ), intent( inout ) :: &
            THETA_FLUX, ONE_M_THETA_FLUX
@@ -1032,7 +1054,7 @@
 
 ! If IGOT_CMC_PRECON=1 use a sym matrix as pressure preconditioner,=0 else CMC as preconditioner as well.
       IGOT_CMC_PRECON=1
-
+ 
       ALLOCATE( ACV( NCOLACV )) ; ACV=0.
       ALLOCATE( CT( NCOLCT * NDIM * NPHASE )) ; CT=0.
       ALLOCATE( CT_RHS( CV_NONODS )) ; CT_RHS=0.
@@ -1656,7 +1678,7 @@
       INTEGER, DIMENSION( NCOLM ), intent( in ) :: COLM
       INTEGER, DIMENSION( CV_NONODS ), intent( in ) :: MIDM 
       REAL, DIMENSION( CV_NONODS * NPHASE ), intent( in ) :: UDEN, UDENOLD
-      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( in ) :: UDIFFUSION 
+      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( inout ) :: UDIFFUSION 
       LOGICAL, intent( inout ) :: JUST_BL_DIAG_MAT
       REAL, DIMENSION( NOPT_VEL_UPWIND_COEFS ), intent( in ) :: OPT_VEL_UPWIND_COEFS
       INTEGER, INTENT( IN ) :: NOIT_DIM
@@ -1893,7 +1915,7 @@
       REAL, DIMENSION( NCOLMCY ), intent( inout ) :: MCY
       REAL, DIMENSION( TOTELE, U_NLOC * NPHASE * NDIM, U_NLOC * NPHASE * NDIM ), intent( inout ) :: PIVIT_MAT
       REAL, DIMENSION( CV_NONODS * NPHASE ), intent( in ) :: UDEN, UDENOLD
-      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( in ) :: UDIFFUSION 
+      REAL, DIMENSION( MAT_NONODS, NDIM, NDIM, NPHASE ), intent( inout ) :: UDIFFUSION 
       LOGICAL, intent( inout ) :: JUST_BL_DIAG_MAT
       REAL, DIMENSION( NOPT_VEL_UPWIND_COEFS ), intent( in ) :: OPT_VEL_UPWIND_COEFS
       INTEGER, INTENT( IN ) :: NOIT_DIM
@@ -1909,8 +1931,10 @@
       REAL, DIMENSION( : ), allocatable :: SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, SUF_T2_BC
       INTEGER, DIMENSION( : ), allocatable :: WIC_T2_BC
       REAL, DIMENSION( : ), allocatable :: THETA_GDIFF, T2, T2OLD, MEAN_PORE_CV, DEN_OR_ONE, DENOLD_OR_ONE
-      LOGICAL :: GET_THETA_FLUX
+      LOGICAL :: GET_THETA_FLUX, stress_form
       INTEGER :: IGOT_T2
+
+      type(scalar_field), dimension(nphase) :: solid_phase_pressure
 
       ewrite(3,*)'In CV_ASSEMB_FORCE_CTY'
 
@@ -1940,6 +1964,16 @@
 
       IF( GLOBAL_SOLVE ) MCY = 0.0
 
+      if (option_count('/material_phase/scalar_field::RadialDistributionFunction')>0) then
+         stress_form=.false.
+         call update_distribution_function(state,satura,saturaold)
+         call calculate_solid_phase_pressure(state,solid_phase_pressure,satura,saturaold)
+         call calculate_solid_shear_viscosity(state,satura,saturaold, udiffusion)
+      else
+         stress_form=.false.
+      end if
+
+
       ! Obtain the momentum and C matricies
       CALL ASSEMB_FORCE_CTY( state, & 
            NDIM, NPHASE, U_NLOC, X_NLOC, P_NLOC, CV_NLOC, MAT_NLOC, TOTELE, &
@@ -1966,7 +2000,7 @@
            PIVIT_MAT, JUST_BL_DIAG_MAT, &
            UDIFFUSION, &
            IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD, &
-           P, scale_momentum_by_volume_fraction, NDIM )
+           P, scale_momentum_by_volume_fraction, NDIM, stress_form, solid_phase_pressure)
       ! scale the momentum equations by the volume fraction / saturation for the matrix and rhs     
 
       IF(GLOBAL_SOLVE) THEN
@@ -2051,6 +2085,13 @@
       DEALLOCATE( MEAN_PORE_CV )
       DEALLOCATE( SAT_FEMT )
       DEALLOCATE( DEN_FEMT )
+      
+      if (option_count('/material_phase/scalar_field::RadialDistributionFunction')>0) then
+         call set_div_u(state,U, V, W, CV_NONODS, U_NONODS, NDIM, NPHASE, &
+         CT, NCOLCT, FINDCT, COLCT) 
+         call clean_solid_phase_pressure(solid_phase_pressure)
+      end if
+
 
       ewrite(3,*) 'Leaving CV_ASSEMB_FORCE_CTY'
 
@@ -2198,7 +2239,7 @@
          PIVIT_MAT, JUST_BL_DIAG_MAT,  &
          UDIFFUSION, &
          IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD, &
-         P, scale_momentum_by_volume_fraction, NDIM_VEL )
+         P, scale_momentum_by_volume_fraction, NDIM_VEL,stress_form,solid_phase_pressure)
       use shape_functions_NDim
       implicit none
 
@@ -2252,6 +2293,9 @@
       REAL, DIMENSION( IPLIKE_GRAD_SOU*CV_NONODS * NPHASE ), intent( in ) :: PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD
       REAL, DIMENSION( CV_NONODS ), intent( in ) :: P
       LOGICAL, INTENT(IN) :: scale_momentum_by_volume_fraction
+      type(scalar_field), DIMENSION( NPHASE ), intent( in ), optional :: solid_phase_pressure
+      logical :: stress_form
+
 
       ! Local Variables
       ! This is for decifering WIC_U_BC & WIC_P_BC
@@ -2260,7 +2304,7 @@
       INTEGER, PARAMETER :: WIC_U_BC_DIRICHLET = 1, WIC_U_BC_DIRICHLET_INOUT = 5
       INTEGER, PARAMETER :: WIC_U_BC_ROBIN = 2, WIC_U_BC_DIRI_ADV_AND_ROBIN = 3
       INTEGER, PARAMETER :: WIC_P_BC_DIRICHLET = 1
-      LOGICAL, PARAMETER :: VOL_ELE_INT_PRES = .TRUE., STRESS_FORM=.FALSE., STAB_VISC_WITH_ABS=.FALSE.
+      LOGICAL, PARAMETER :: VOL_ELE_INT_PRES = .TRUE., STAB_VISC_WITH_ABS=.FALSE.
 ! if STAB_VISC_WITH_ABS then stabilize (in the projection mehtod) the viscosity using absorption.
 !      REAL, PARAMETER :: WITH_NONLIN = 1.0, TOLER = 1.E-10, ZERO_OR_TWO_THIRDS=2.0/3.0
       REAL, PARAMETER :: WITH_NONLIN = 1.0, TOLER = 1.E-10, ZERO_OR_TWO_THIRDS=0.0
@@ -2361,6 +2405,8 @@
       integer :: IPIV(U_NLOC)
       REAL :: RHS_U_CV(U_NLOC),RHS_U_CV_OLD(U_NLOC),UDEN_VFILT(NPHASE*U_NLOC),UDENOLD_VFILT(NPHASE*U_NLOC)
 
+      type(scalar_field_pointer), dimension(nphase) :: PhaseVolumeFraction, OldPhaseVolumeFraction
+
       ewrite(3,*) 'In ASSEMB_FORCE_CTY'
       !ewrite(3,*) 'Just double-checking sparsity patterns memory allocation:'
       !ewrite(3,*) 'FINDC with size,', size( FINDC ), ':', FINDC( 1 :  size( FINDC ) )
@@ -2392,6 +2438,17 @@
       if ( have_option( &
            '/material_phase[0]/vector_field::Velocity/prognostic/spatial_discretisation/discontinuous_galerkin/mass_terms/lump_mass_matrix') &
            ) lump_mass = .true.
+
+
+      do iphase=1,nphase
+         if (has_scalar_field(state(iphase),"RadialDistributionFunction")) then
+            PhaseVolumeFraction(iphase)%ptr=>extract_scalar_field(state(iphase),"PhaseVolumeFraction")
+            OldPhaseVolumeFraction(iphase)%ptr=>extract_scalar_field(state(iphase),"OldPhaseVolumeFraction")
+         else
+            nullify(PhaseVolumeFraction(iphase)%ptr)
+            nullify(OldPhaseVolumeFraction(iphase)%ptr)
+         end if
+      end do
 
       ! This applies a non-linear shock capturing scheme which 
       ! may be used to reduce oscillations in velocity or 
@@ -3447,6 +3504,28 @@ end if
                      IF( NDIM_VEL >= 2 ) C( COUNT_PHA + NCOLC ) = C( COUNT_PHA + NCOLC ) - NMY
                      IF( NDIM_VEL >= 3 ) C( COUNT_PHA + 2 * NCOLC ) = C( COUNT_PHA + 2 * NCOLC ) - NMZ
 
+
+                     if (associated(PhaseVolumeFraction(iphase)%ptr)) then
+                        IDIM=1
+                        U_RHS( IU_NOD + ( IDIM - 1 ) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS ) =&
+                             U_RHS( IU_NOD + ( IDIM - 1 ) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS ) &
+                             -NMX*solid_phase_pressure(iphase)%val(JCV_NOD)
+                        IF( NDIM_VEL >= 2 ) THEN
+                           IDIM=2
+                           U_RHS( IU_NOD + ( IDIM - 1 ) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS ) =   &
+                                U_RHS( IU_NOD + ( IDIM - 1 ) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS )     &
+                                -NMY *solid_phase_pressure(iphase)%val(JCV_NOD)
+                        ENDIF
+                        IF( NDIM_VEL >= 3 ) THEN
+                           IDIM=3
+                           U_RHS( IU_NOD + (IDIM-1) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS ) =   &
+                                U_RHS( IU_NOD + (IDIM-1) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS )     &
+                                -NMZ*solid_phase_pressure(iphase)%val(JCV_NOD)
+                        ENDIF
+                     end if
+                        
+                           
+
                      IF( IPLIKE_GRAD_SOU == 1 ) THEN ! Capillary pressure for example terms...
                         IDIM = 1
                         U_RHS( IU_NOD + ( IDIM - 1 ) * U_NONODS + ( IPHASE - 1 ) * NDIM_VEL * U_NONODS ) =   &
@@ -3584,13 +3663,13 @@ end if
                            JPHA_JDIM=(JPHASE-1)*NDIM_VEL + JDIM
                            IF(JDIM==1) &
                                 RESID(GI, IPHASE,IDIM)=RESID(GI, IPHASE,IDIM)+ &
-                                SIGMAGI( GI, IPHA_IDIM, JPHA_JDIM )*UD( GI, IPHASE )
+                                SIGMAGI( GI, IPHA_IDIM, JPHA_JDIM )*UD( GI, JPHASE )
                            IF(JDIM==2) &
                                 RESID(GI, IPHASE,IDIM)=RESID(GI, IPHASE,IDIM)+ &
-                                SIGMAGI( GI, IPHA_IDIM, JPHA_JDIM )*VD( GI, IPHASE )
+                                SIGMAGI( GI, IPHA_IDIM, JPHA_JDIM )*VD( GI, JPHASE )
                            IF(JDIM==3) &
                                 RESID(GI, IPHASE,IDIM)=RESID(GI, IPHASE,IDIM)+ &
-                                SIGMAGI( GI, IPHA_IDIM, JPHA_JDIM )*WD( GI, IPHASE )
+                                SIGMAGI( GI, IPHA_IDIM, JPHA_JDIM )*WD( GI, JPHASE )
                         END DO
                      END DO
                   END DO
@@ -3614,6 +3693,22 @@ end if
                   P_DX( GI ) = P_DX( GI ) + CVFENX( P_ILOC, GI )*P(P_INOD)
                   IF(NDIM.GE.2) P_DY( GI ) = P_DY( GI ) + CVFENY( P_ILOC, GI )*P(P_INOD)
                   IF(NDIM.GE.3) P_DZ( GI ) = P_DZ( GI ) + CVFENZ( P_ILOC, GI )*P(P_INOD)
+
+                  DO IPHASE=1,NPHASE
+                     if (associated(PhaseVolumeFraction(iphase)%ptr)) then
+                        RESID_U(GI, IPHASE)=RESID_U(GI, IPHASE) &
+                             +CVFENX( P_ILOC, GI ) * &
+                             solid_phase_pressure(iphase)%val(P_INOD)
+                        RESID_V(GI, IPHASE)=RESID_V(GI, IPHASE) &
+                             +CVFENY( P_ILOC, GI ) * &
+                             solid_phase_pressure(iphase)%val(P_INOD)
+                        RESID_W(GI, IPHASE)=RESID_W(GI, IPHASE) &
+                             +CVFENZ( P_ILOC, GI ) * &
+                             solid_phase_pressure(iphase)%val(P_INOD)
+                            
+                     end if
+                  end DO
+
                   IF( IPLIKE_GRAD_SOU == 1 ) THEN ! Capillary pressure for example terms...
                      DO IPHASE=1,NPHASE
                         RESID_U(GI, IPHASE)=RESID_U(GI, IPHASE) &

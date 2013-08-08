@@ -956,7 +956,7 @@
       select case(drag_options%type)
       case(0)
          call allocate(coeff,mesh,"Drag")
-         call callculate_function_at_nodes(drag_options%python_data,coeff)
+         call calculate_function_at_nodes(drag_options%python_data,coeff)
          do IDIM=1,ndim
             block1=(continuous_phase-1)*ndim+IDIM
             block2=(dispersed_phase-1)*ndim+IDIM
@@ -966,7 +966,7 @@
                call addto_diag(absorption,block1,block1,dg_nodes, coeff%val(nodes)*ratio%val(nodes))
                call addto_diag(absorption,block1,block2,dg_nodes,-coeff%val(nodes)*ratio%val(nodes))
                call addto_diag(absorption,block2,block1,dg_nodes,-coeff%val(nodes))
-               call addto_diag(absorption,block2,block2,dg_nodes,-coeff%val(nodes))
+               call addto_diag(absorption,block2,block2,dg_nodes, coeff%val(nodes))
             end do
          end do
          call deallocate(coeff)
@@ -982,6 +982,20 @@
                call addto_diag(absorption,block1,block2,dg_nodes,-cval*ratio%val(nodes))
                call addto_diag(absorption,block2,block1,dg_nodes,spread(-cval,1,nloc))
                call addto_diag(absorption,block2,block2,dg_nodes,spread( cval,1,nloc))
+            end do
+         end do
+      case(-1)
+         cval=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)
+         do IDIM=1,ndim
+            block1=(continuous_phase-1)*ndim+IDIM
+            block2=(dispersed_phase-1)*ndim+IDIM
+            do ele=1,ele_count(continuous_volume_fraction)
+               nodes=>ele_nodes(continuous_volume_fraction,ele)
+               dg_nodes=>ele_nodes(mesh,ele)
+               call addto_diag(absorption,block1,block1,dg_nodes, cval*dispersed_volume_fraction%val(nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,-cval*dispersed_volume_fraction%val(nodes))
+               call addto_diag(absorption,block2,block1,dg_nodes,-cval*continuous_volume_fraction%val(nodes))
+               call addto_diag(absorption,block2,block2,dg_nodes, cval*continuous_volume_fraction%val(nodes))
             end do
          end do
       case(2)
@@ -1063,9 +1077,17 @@
       select case(trim(type))
       case("python_function")
          options%type=0
-         call initialize_function_data(state,option_path,options%python_data)
+         call initialize_function_data(state,&
+              "/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag",&
+              options%python_data)
       case("Linear")
          options%type=1
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
+              options%diameter, default=0.001)
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
+              options%coefficient, default=0.001)
+         case("Bilinear")
+         options%type=-1
          call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
               options%diameter, default=0.001)
          call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
@@ -1084,14 +1106,16 @@
      end subroutine get_drag_options
 
     subroutine clean_drag_options(options,clean_option)
-      type(drag_option_type), dimension(i) :: options
-      logical, dimension(:) :: slean_option
+      type(drag_option_type), dimension(:) :: options
+      logical, dimension(:) :: clean_option
 
-      do i=1,size(drag_options)
+      integer :: i
+
+      do i=1,size(options)
          if( clean_option(i)) then
             select case(options(i)%type)
             case(0)
-               call finalize(options%python_data)
+               call finalize_function_data(options(i)%python_data)
             end select
          end if
       end do

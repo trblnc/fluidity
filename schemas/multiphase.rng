@@ -566,6 +566,26 @@ to sum to 1 by adding constraint into compositional source term.</a:documentatio
             </element>
           </optional>
           <optional>
+            <element name="scalar_field">
+              <attribute name="name">
+                <value>RadialDistributionFunction</value>
+              </attribute>
+              <element name="diagnostic">
+                <ref name="pressure_mesh_choice"/>
+                <ref name="internal_algorithm"/>
+              </element>
+              <element name="function">
+                <attribute name="name">
+                  <value>Gidaspow</value>
+                </attribute>
+              </element>
+              <element name="maximum_phase_volume_fraction">
+                <ref name="real"/>
+              </element>
+              <ref name="field_output_options"/>
+            </element>
+          </optional>
+          <optional>
             <element name="scale_momentum_by_volume_fraction">
               <a:documentation>Scale the momentum equation by the volume fraction for when some problems are not well poised.</a:documentation>
               <empty/>
@@ -748,6 +768,19 @@ Default value 2.0</a:documentation>
                   <element name="drag">
                     <attribute name="name">
                       <a:documentation>Options controlling form of drag terms for dispersed fluid-particle interactions</a:documentation>
+                      <value>Bilinear</value>
+                    </attribute>
+                    <element name="diameter">
+                      <ref name="real"/>
+                    </element>
+                    <element name="coefficient">
+                      <ref name="real"/>
+                    </element>
+                    <ref name="comment"/>
+                  </element>
+                  <element name="drag">
+                    <attribute name="name">
+                      <a:documentation>Options controlling form of drag terms for dispersed fluid-particle interactions</a:documentation>
                       <value>Quadratic</value>
                     </attribute>
                     <element name="diameter">
@@ -756,6 +789,73 @@ Default value 2.0</a:documentation>
                     <element name="coefficient">
                       <ref name="real"/>
                     </element>
+                    <ref name="comment"/>
+                  </element>
+                  <element name="drag">
+                    <attribute name="name">
+                      <a:documentation>Options controlling form of drag terms for dispersed fluid-particle interactions</a:documentation>
+                      <value>Wen&amp;Yu</value>
+                    </attribute>
+                    <element name="diameter">
+                      <ref name="real"/>
+                    </element>
+                    <element name="particle_Reynolds_number">
+                      <ref name="real"/>
+                    </element>
+                    <ref name="comment"/>
+                  </element>
+                  <element name="drag">
+                    <attribute name="name">
+                      <a:documentation>Options controlling form of drag terms for dispersed fluid-particle interactions</a:documentation>
+                      <value>Gidaspow</value>
+                    </attribute>
+                    <element name="diameter">
+                      <ref name="real"/>
+                    </element>
+                    <element name="coefficient">
+                      <ref name="real"/>
+                    </element>
+                    <ref name="comment"/>
+                  </element>
+                  <element name="drag">
+                    <attribute name="name">
+                      <a:documentation>Options controlling form of drag terms for dispersed fluid-particle interactions</a:documentation>
+                      <value>python_function</value>
+                    </attribute>
+                    <element name="function">
+                      <ref name="python_code"/>
+                    </element>
+                    <oneOrMore>
+                      <element name="argument">
+                        <attribute name="name">
+                          <data type="string"/>
+                        </attribute>
+                        <choice>
+                          <element name="type">
+                            <attribute name="name">
+                              <value>scalar_field</value>
+                            </attribute>
+                          </element>
+                          <element name="type">
+                            <attribute name="name">
+                              <value>vector_field</value>
+                            </attribute>
+                          </element>
+                          <element name="type">
+                            <attribute name="name">
+                              <value>tensor_field</value>
+                            </attribute>
+                          </element>
+                        </choice>
+                        <optional>
+                          <element name="material_phase">
+                            <attribute name="name">
+                              <data type="string"/>
+                            </attribute>
+                          </element>
+                        </optional>
+                      </element>
+                    </oneOrMore>
                     <ref name="comment"/>
                   </element>
                 </choice>

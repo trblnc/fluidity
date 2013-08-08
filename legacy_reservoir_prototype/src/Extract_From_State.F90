@@ -990,7 +990,7 @@
 
          if ( have_source ) then
             do j = 1, node_count( field_source )
-               field_prot_source( ( iphase - 1 ) * node_count( field_source ) + j ) = &
+               field_prot_source( j ) = &
                     field_source % val( j )
             end do
          end if
@@ -1523,7 +1523,19 @@
             if( have_option( trim( option_viscosity ) ) ) then
                option_path = trim( option_viscosity )
             else
-               FLAbort( 'Option path for the Viscosity tensor is incomplete.' )
+               option_viscosity = '/material_phase[' // int2str( istate - 1 ) // ']/vector_field::' // &
+                    'Velocity/prognostic/tensor_field::' // trim( field_name ) // '/diagnostic'
+               if( have_option( trim( option_viscosity ) ) ) then
+                  option_path = trim( option_viscosity)
+                  do idim = 1, ndim
+                     field_prot_tensor( : , idim, idim ) = 0.0
+                  end do
+               
+                  cycle
+               else
+                  FLAbort( 'Option path for the Viscosity tensor is incomplete.' )
+               
+               end if
             end if
          end if
 !!$
