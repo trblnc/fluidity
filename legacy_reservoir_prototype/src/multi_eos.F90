@@ -72,84 +72,463 @@
 
   contains
 
-    subroutine Calculate_Phase_Component_Densities( state, &
-         Density, Derivative, Density_Cp )
+    subroutine Calculate_All_Rhos( state, ncomp_in, nphase, cv_nonods, Component, &
+         Density_Bulk, DensityCp_Bulk, DRhoDPressure, Density_Component )
+
       implicit none
-      type( state_type ), dimension( : ), intent( in ) :: state
-      real, dimension( : ), intent( inout ) :: Density, Derivative, Density_Cp
 
-!!$ Local variables
-      type( scalar_field ), pointer :: pressure
-      type( vector_field ), pointer :: positions
+      type( state_type ), dimension( : ), intent( in) :: state
+      integer, intent( in ) :: ncomp_in, nphase, cv_nonods
+      real, dimension( cv_nonods * nphase * ncomp_in ), intent( in ) :: Component
+      real, dimension( cv_nonods * nphase ), intent( inout ) :: Density_Bulk, DensityCp_Bulk
+      real, dimension( cv_nonods * nphase ), intent( inout ), optional :: DRhoDPressure
+      real, dimension( cv_nonods * nphase * ncomp_in ), intent( inout ) :: Density_Component
+
+      real, dimension( : ), allocatable :: Rho, dRhodP, Cp
       character( len = option_path_len ), dimension( : ), allocatable :: eos_option_path
-      integer :: nstates, nphase, ncomp, iphase, icomp, istate, nstate_init, nstate_final, cv_nonods
-      logical :: is_multicomponent, is_multiphase, eos_from_components, eos_from_phases
+      type( scalar_field ), pointer :: Cp_s
+      integer :: icomp, iphase, ncomp, sc, ec, sp, ep, stat
 
-      ewrite(3,*) 'In Calculate_Phase_Component_Densities'
+      Density_Bulk =0. ; DensityCp_Bulk = 0. ; DRhoDPressure = 0.
 
-!!$ Initialise
-      Density = 0. ; Derivative = 0. ; Density_Cp = 0. 
+      ncomp = ncomp_in
+      if( ncomp_in == 0 ) ncomp = 1
 
-!!$ Defining number of states from the schema (nstates)
-      nstates = option_count( '/material_phase' )
-      allocate( eos_option_path( nstates ) )
+      allocate( eos_option_path( nphase * ncomp ) )
 
-!!$ Let's assume that there are the same number of components in each phase
-      ncomp = 0 ; is_multicomponent = .false. ; is_multiphase = .false.
-      do istate = 1, nstates
-         if( have_option( '/material_phase[' // int2str( istate - 1 ) // &
-              ']/is_multiphase_component' ) ) then
-            ncomp = ncomp + 1 ; is_multicomponent = .true.
-         end if
-      end do
-      nphase = nstates - ncomp
-      if( nphase > 1 ) is_multiphase = .true.
-      assert( nphase > 0 ) ! Check if there is more than 0 phases
+      if( ncomp > 1 ) then
+         do icomp =1, ncomp
+            do iphase =1, nphase
+               eos_option_path( ( icomp - 1 ) * nphase + iphase ) = &
+                    trim( '/material_phase[' // int2str( nphase + icomp - 1 ) // &
+                    ']/scalar_field::ComponentMassFractionPhase' // int2str( iphase ) // &
+                    '/prognostic/equation_of_state' )
+               call Assign_Equation_of_State( eos_option_path( ( icomp - 1 ) * nphase + iphase ) )
+            end do
+         end do
+      else
+         do iphase =1, nphase
+            eos_option_path( iphase ) = trim( '/material_phase[' // int2str( iphase - 1 ) // ']/equation_of_state' )
+            call Assign_Equation_of_State( eos_option_path( iphase ) )
+         end do
+      end if
 
-!!$ Obtaining control-volume Pressure field and boundary conditions (not necessary)
-      pressure => extract_scalar_field( state(1), 'Pressure' )
-      cv_nonods = node_count( pressure )
+      allocate( Rho( cv_nonods ), dRhodP( cv_nonods ) )
+      allocate( Cp( cv_nonods ) ) ; Cp = 1.
+      do icomp = 1, ncomp
+         do iphase = 1, nphase
+            sc = ( icomp - 1 ) * nphase * cv_nonods + ( iphase - 1 ) * cv_nonods + 1
+            ec = ( icomp - 1 ) * nphase * cv_nonods + iphase * cv_nonods
 
-!!$ Defining the EOS for either each phase or each component:
-      eos_from_components = .false. ; eos_from_phases = .false.
-      Loop_Over_All_States: do istate = 1, nstates
-         if( have_option( '/material_phase[' // int2str( istate - 1 ) // ']/equation_of_state' ) ) then
-            if ( istate <= nphase ) then
-               eos_from_phases = .true.
-               if( eos_from_components ) &
-                    FLAbort( 'EOS can be assigned for either Phases or Components. Not both, please check the mpml file')
+            sp = ( iphase - 1 ) * cv_nonods + 1 
+            ep = iphase * cv_nonods 
+
+            Rho=0. ; dRhodP=0. ; Cp=1.
+            call Calculate_Rho_dRhodP( state, iphase, icomp, &
+                 nphase, ncomp_in, eos_option_path( (icomp - 1 ) * nphase + iphase ), Rho, dRhodP )
+
+            if( ncomp > 1 ) then
+
+               Density_Bulk( sp : ep ) = Density_Bulk( sp : ep ) + Rho * Component( sc : ec )
+               DRhoDPressure( sp : ep ) = DRhoDPressure( sp : ep ) + dRhodP * Component( sc : ec ) / Rho
+               Density_Component( sc : ec ) = Rho
+
+               Cp_s => extract_scalar_field( state( nphase + icomp ), &
+                    'ComponentMassFractionPhase' // int2str( iphase ) // 'HeatCapacity', stat )
+               if( stat == 0 ) Cp = Cp_s % val
+               DensityCp_Bulk( sp : ep ) = DensityCp_Bulk( sp : ep ) + Rho * Cp * Component( sc : ec )
+
             else
-               eos_from_components = .true.
-               if( eos_from_phases ) &
-                    FLAbort( 'EOS can be assigned for either Phases or Components. Not both, please check the mpml file')
+
+               Density_Bulk( sp : ep ) = Rho
+               DRhoDPressure( sp : ep ) = dRhodP
+
+               Cp_s => extract_scalar_field( state( iphase ), 'HeatCapacity', stat )
+               if( stat == 0 ) Cp = Cp_s % val
+               DensityCp_Bulk( sp : ep ) = Rho * Cp
+
             end if
 
-            eos_option_path( istate ) = trim( '/material_phase[' // int2str( istate - 1 ) // ']/equation_of_state' )
-            call Assign_Equation_of_State( eos_option_path( istate ) )
+         end do ! iphase
+      end do ! icomp
+      deallocate( Rho, dRhodP, Cp )
+      deallocate( eos_option_path )
 
-         end if
-      end do Loop_Over_All_States
+      if( ncomp > 1 ) &
+           call Cap_Bulk_Rho( state, ncomp, nphase, &
+           cv_nonods, Density_Component, Density_Bulk, DensityCp_Bulk )
 
-      if ( eos_from_phases ) then
-         nstate_init = 1 ; nstate_final = 1
-      elseif( eos_from_components ) then
-         nstate_init = nphase + 1 ; nstate_final =  nstates
+    end subroutine Calculate_All_Rhos
+
+
+    subroutine Cap_Bulk_Rho( state, ncomp, nphase, &
+         cv_nonods, Density_Component, Density, Density_Cp )
+
+      implicit none
+
+      type(state_type), dimension( : ) :: state
+      integer, intent( in ) :: nphase, ncomp, cv_nonods
+      real, dimension( cv_nonods * nphase * ncomp ), intent( in ) :: Density_Component
+      real, dimension( cv_nonods * nphase ), intent( inout ) :: Density, Density_Cp
+
+      real, dimension( :, : ), allocatable :: Density_Component_Min, Density_Component_Max
+      real, dimension( :, : ), allocatable :: Density_Cp_Component_Min, Density_Cp_Component_Max
+      type( scalar_field ), pointer :: Cp_s
+      real, dimension( : ), allocatable :: Cp
+      integer :: sp, ep, sc, ec, iphase, icomp, stat
+
+      allocate( Density_Component_Min( nphase, cv_nonods ) ) ; Density_Component_Min = 1.e+15
+      allocate( Density_Component_Max( nphase, cv_nonods ) ) ; Density_Component_Max = 0.
+      allocate( Density_Cp_Component_Min( nphase, cv_nonods ) ) ; Density_Cp_Component_Min = 1.e+15
+      allocate( Density_Cp_Component_Max( nphase, cv_nonods ) ) ; Density_Cp_Component_Max = 0.
+      allocate( Cp( cv_nonods ) ) ; Cp = 1.
+
+      do iphase = 1, nphase
+         do icomp = 1, ncomp
+            sc = ( icomp - 1 ) * nphase * cv_nonods + ( iphase - 1 ) * cv_nonods + 1
+            ec = ( icomp - 1 ) * nphase * cv_nonods + iphase * cv_nonods
+
+            Density_Component_Min( iphase, : ) = min( Density_Component_Min( iphase, : ), Density_Component( sc : ec ) )
+            Density_Component_Max( iphase, : ) = max( Density_Component_Max( iphase, : ), Density_Component( sc : ec ) )
+
+            Cp = 1.
+            Cp_s => extract_scalar_field( state( nphase + icomp ), &
+                 'ComponentMassFractionPhase' // int2str( iphase ) // 'HeatCapacity', stat )
+            if( stat == 0 ) Cp = Cp_s % val
+
+            Density_Cp_Component_Min( iphase, : ) = min( Density_Cp_Component_Min( iphase, : ), Density_Component( sc : ec ) * Cp )
+            Density_Cp_Component_Max( iphase, : ) = max( Density_Cp_Component_Max( iphase, : ), Density_Component( sc : ec ) * Cp )
+         end do
+      end do
+
+      do iphase = 1, nphase
+         sp = ( iphase - 1 ) * cv_nonods + 1
+         ep = iphase * cv_nonods
+
+         Density( sp : ep ) = min( Density( sp : ep ), Density_Component_Max( iphase, : ) )
+         Density( sp : ep ) = max( Density( sp : ep ), Density_Component_Min( iphase, : ) )
+
+         Density_Cp( sp : ep ) = min( Density_Cp( sp : ep ), Density_Cp_Component_Max( iphase, : ) )
+         Density_Cp( sp : ep ) = max( Density_Cp( sp : ep ), Density_Cp_Component_Min( iphase, : ) )
+      end do
+
+      deallocate( Cp )
+      deallocate( Density_Cp_Component_Min, Density_Cp_Component_Max )
+      deallocate( Density_Component_Min, Density_Component_Max )
+
+    end subroutine Cap_Bulk_Rho
+
+
+    subroutine Calculate_Component_Rho( state, ncomp, nphase, &
+         cv_nonods, Density_Component )
+
+      implicit none
+
+      type( state_type ), dimension( : ), intent( in) :: state
+      integer, intent( in ) :: ncomp, nphase, cv_nonods
+      real, dimension( cv_nonods * nphase * ncomp ), intent( inout ) :: Density_Component
+
+      real, dimension( : ), allocatable :: Rho, dRhodP
+      character( len = option_path_len ) :: eos_option_path
+      integer :: icomp, iphase, s, e
+
+      Density_Component = 0.
+      allocate( Rho( cv_nonods ), dRhodP( cv_nonods ) )
+
+      do icomp = 1, ncomp
+
+         do iphase = 1, nphase
+            s = ( icomp - 1 ) * nphase * cv_nonods + ( iphase - 1 ) * cv_nonods + 1
+            e = ( icomp - 1 ) * nphase * cv_nonods + iphase * cv_nonods
+
+            eos_option_path = trim( '/material_phase[' // int2str( nphase + icomp - 1 ) // &
+                 ']/scalar_field::ComponentMassFractionPhase' // int2str( iphase ) // &
+                 '/prognostic/equation_of_state' )
+
+            call Assign_Equation_of_State( eos_option_path )
+            Rho=0. ; dRhodP=0.
+            call Calculate_Rho_dRhodP( state, iphase, icomp, &
+                 nphase, ncomp, eos_option_path, Rho, dRhodP )
+
+            Density_Component( s : e ) = Rho
+
+         end do ! iphase
+      end do ! icomp
+      deallocate( Rho, dRhodP )
+
+    end subroutine Calculate_Component_Rho
+
+
+    subroutine Calculate_Rho_dRhodP( state, iphase, icomp, &
+         nphase, ncomp, eos_option_path, rho, drhodp )
+
+      implicit none
+
+      type( state_type ), dimension( : ), intent( in ) :: state
+      integer, intent( in ) :: iphase, icomp, nphase, ncomp
+      character( len = option_path_len ), intent( in ) :: eos_option_path
+      real, dimension( : ), intent( inout ) :: rho, drhodp
+
+      type( scalar_field ), pointer :: pressure, temperature, density
+      character( len = option_path_len ) :: option_path_comp, option_path_incomp, option_path_python, buffer
+      character( len = python_func_len ) :: pycode
+      logical, save :: initialised = .false.
+      logical :: have_temperature_field
+      real, parameter :: toler = 1.e-10
+      real, dimension( : ), allocatable, save :: reference_pressure
+      real, dimension( : ), allocatable :: eos_coefs, perturbation_pressure, RhoPlus, RhoMinus
+      real, dimension( : ), allocatable :: pressure_back_up, density_back_up, temperature_local
+      real :: dt, current_time
+      integer :: ncoef, stat
+
+!!$ Den = c1 * ( P + c2 ) / T           :: Stiffened EOS
+!!$ Den = c1 * P + c2                   :: Linear_1 EOS
+!!$ Den = c1 * P / T + c2               :: Linear_2 EOS
+!!$ Den = Den0 * exp[ c0 * ( P - P0 ) ] :: Exponential_1 EOS
+!!$ Den = c0 * P** c1                   :: Exponential_2 EOS
+
+      pressure => extract_scalar_field( state( 1 ), 'Pressure' )
+      temperature => extract_scalar_field( state( iphase ), 'Temperature', stat )
+      have_temperature_field = ( stat == 0 )
+
+      assert( node_count( pressure ) == size( rho ) )
+      assert( node_count( pressure ) == size( drhodp ) )
+
+      allocate( perturbation_pressure( node_count( pressure ) ) ) ; perturbation_pressure = 0.
+      allocate( RhoPlus( node_count( pressure ) ) ) ; RhoPlus = 0.
+      allocate( RhoMinus( node_count( pressure ) ) ) ; RhoMinus = 0.
+
+      if ( ncomp > 0 ) then
+         option_path_comp = trim( '/material_phase[' // int2str( nphase + icomp - 1 ) // &
+              ']/scalar_field::ComponentMassFractionPhase' // int2str( iphase ) // &
+              '/prognostic/equation_of_state/compressible' )
+         option_path_incomp = trim( '/material_phase[' // int2str(nphase + icomp - 1 ) // &
+              ']/scalar_field::ComponentMassFractionPhase' // int2str( iphase ) // &
+              '/prognostic/equation_of_state/incompressible' )
+         option_path_python = trim( '/material_phase[' // int2str( nphase + icomp - 1 ) // &
+              ']/scalar_field::ComponentMassFractionPhase' // int2str( iphase ) // &
+              '/prognostic/equation_of_state/python_state' )
       else
-         FLAbort( 'Option not defined yet. A set of EOS need to be assigned.' )
-      endif
+         option_path_comp = trim( '/material_phase[' // int2str( iphase - 1 ) // &
+              ']/equation_of_state/compressible' )
+         option_path_incomp = trim( '/material_phase[' // int2str( iphase - 1 ) // &
+              ']/equation_of_state/incompressible' )
+         option_path_python = trim( '/material_phase[' // int2str( iphase - 1 ) // &
+              ']/equation_of_state/python_state' )
+      end if
 
-      Loop_Over_Phases: do iphase = 1, nphase
-         call Computing_Perturbation_Density( state, &
-              iphase, nstate_init, nstate_final, eos_option_path, &
-              Density( ( iphase - 1 ) * cv_nonods + 1 : iphase * cv_nonods ), &
-              Derivative( ( iphase - 1 ) * cv_nonods + 1 : iphase * cv_nonods ), &
-              DensityCpComponent_Field = Density_Cp( ( iphase - 1 ) * cv_nonods + 1 : iphase * cv_nonods ) )
-      end do Loop_Over_Phases
+      Conditional_EOS_Option: if( trim( eos_option_path ) == trim( option_path_comp ) // '/stiffened_gas' ) then
+!!$ Den = C0 / T * ( P - C1 )
+         if( .not. have_temperature_field ) FLAbort( 'Temperature Field not defined' )
+         allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
+         call get_option( trim( eos_option_path // '/eos_option1' ), eos_coefs( 1 ) )
+         call get_option( trim( eos_option_path // '/eos_option2' ), eos_coefs( 2 ) )
+         Rho = ( pressure % val + eos_coefs( 1 ) ) * eos_coefs( 2 ) / temperature % val
+         perturbation_pressure = max( toler, 1.e-3 * ( abs( pressure % val ) + eos_coefs( 1 ) ) )
+         RhoPlus = ( pressure % val + perturbation_pressure + eos_coefs( 1 ) ) *  eos_coefs( 2 ) / &
+              temperature % val
+         RhoMinus = ( pressure % val - perturbation_pressure + eos_coefs( 1 ) ) *  eos_coefs( 2 ) / &
+              temperature % val
+         dRhodP = 0.5 * ( RhoPlus - RhoMinus ) / perturbation_pressure
+         deallocate( eos_coefs )
 
-      ewrite(3,*) 'Leaving Calculate_Phase_Component_Densities'
+      elseif( trim( eos_option_path ) == trim( option_path_comp ) // '/linear_in_pressure' ) then
+!!$ Den = C0 * P +C1
+         allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
+         call get_option( trim( eos_option_path ) // '/coefficient_A', eos_coefs( 1 ) )
+         call get_option( trim( eos_option_path ) // '/coefficient_B', eos_coefs( 2 ) )
+         Rho = eos_coefs( 1 ) * pressure % val + eos_coefs( 2 )
+         perturbation_pressure = 1.
+         !RhoPlus = eos_coefs( 1 ) * ( pressure % val + perturbation_pressure ) + eos_coefs( 2 )
+         !RhoMinus = eos_coefs( 1 ) * ( pressure % val - perturbation_pressure ) + eos_coefs( 2 )
+         dRhodP = eos_coefs( 1 ) !0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
+         deallocate( eos_coefs )
+
+      elseif( trim( eos_option_path ) == trim( option_path_comp ) // '/linear_in_pressure/include_internal_energy' ) then
+!!$ Den = C0 * P/T +C1
+         if( .not. have_temperature_field ) FLAbort( 'Temperature Field not defined' )
+         allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
+         call get_option( trim( option_path_comp ) // '/linear_in_pressure/coefficient_A', eos_coefs( 1 ) )
+         call get_option( trim( option_path_comp ) // '/linear_in_pressure/coefficient_B', eos_coefs( 2 ) )
+         Rho = eos_coefs( 1 ) * pressure % val / temperature % val + eos_coefs( 2 )
+         perturbation_pressure = 1.
+         !RhoPlus = eos_coefs( 1 ) * ( pressure % val + perturbation_pressure ) / &
+         !     ( max( toler, temperature % val ) ) + eos_coefs( 2 )
+         !RhoMinus = eos_coefs( 1 ) * ( pressure % val - perturbation_pressure ) / &
+         !     ( max( toler, temperature % val ) ) + eos_coefs( 2 )
+         dRhodP =  eos_coefs( 1 ) / temperature % val !0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
+         deallocate( eos_coefs )
+
+      elseif( trim( eos_option_path ) == trim( option_path_comp ) // '/exponential_oil_gas' ) then
+!!$ Den = Den0 * Exp[ C0 * ( P - P0 ) ]
+         allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
+         call get_option( trim( eos_option_path ) // '/compressibility', eos_coefs( 1 ) )   ! compressibility_factor 
+         call get_option( trim( eos_option_path ) // '/reference_density', eos_coefs( 2 ) ) ! reference_density 
+         if ( .not. initialised ) then
+            allocate( reference_pressure( node_count( pressure ) ) )
+            reference_pressure = pressure % val
+            initialised = .true.
+         end if
+         Rho = eos_coefs( 2 ) * exp( eos_coefs( 1 ) * ( pressure % val - reference_pressure ) )
+         perturbation_pressure = max( toler, 1.e-3 * ( abs( pressure % val ) ) )
+         RhoPlus = eos_coefs( 2 ) * exp( eos_coefs( 1 ) * ( ( pressure % val + perturbation_pressure ) - &
+              reference_pressure ) ) 
+         RhoMinus = eos_coefs( 2 ) * exp( eos_coefs( 1 ) * ( ( pressure % val - perturbation_pressure ) - &
+              reference_pressure ) ) 
+         dRhodP = 0.5 * ( RhoPlus - RhoMinus ) / perturbation_pressure
+         deallocate( eos_coefs )
+
+      elseif( trim( eos_option_path ) == trim( option_path_comp ) // '/exponential_in_pressure' ) then 
+!!$ Den = C0 * ( P ^ C1 )
+         allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
+         call get_option( trim( eos_option_path ) // '/coefficient_A', eos_coefs( 1 ) )
+         call get_option( trim( eos_option_path ) // '/coefficient_B', eos_coefs( 2 ) )
+         Rho = eos_coefs( 1 ) * pressure % val ** eos_coefs( 2 )
+         perturbation_pressure = 1.
+         RhoPlus = eos_coefs( 1 ) * ( pressure % val + perturbation_pressure ) ** eos_coefs( 2 )
+         RhoMinus = eos_coefs( 1 ) * ( pressure % val - perturbation_pressure ) ** eos_coefs( 2 )
+         dRhodP = 0.5 * ( RhoPlus - RhoMinus ) / perturbation_pressure
+         deallocate( eos_coefs )
+
+      elseif( trim( eos_option_path ) == trim( option_path_incomp ) // '/linear' ) then
+!!$ Polynomial representation
+         allocate( temperature_local( node_count( pressure ) ) ) ; temperature_local = 0.
+         if ( have_temperature_field ) temperature_local = temperature % val
+         ncoef = 10 ; allocate( eos_coefs( ncoef ) ) ; eos_coefs = 0.
+         if( have_option( trim( eos_option_path ) // '/all_equal' ) ) then
+            call get_option( trim( eos_option_path ) // '/all_equal', eos_coefs( 1 ) )
+            eos_coefs( 2 : 10 ) = 0.
+         elseif( have_option( trim( eos_option_path ) // '/specify_all' ) ) then
+            call get_option( trim( eos_option_path ) // '/specify_all', eos_coefs )
+         else
+            FLAbort('Unknown incompressible linear equation of state')
+         end if
+         call Density_Polynomial( eos_coefs, pressure % val, temperature_local, &
+              Rho )
+         perturbation_pressure = max( toler, 1.e-3 * abs( pressure % val ) )
+         call Density_Polynomial( eos_coefs, pressure % val + perturbation_pressure, temperature_local, &
+              RhoPlus )
+         call Density_Polynomial( eos_coefs, pressure % val - perturbation_pressure, temperature_local, &
+              RhoMinus )
+         dRhodP = 0.5 * ( RhoPlus - RhoMinus ) / perturbation_pressure
+         deallocate( temperature_local, eos_coefs )
+
+      elseif( trim( eos_option_path ) == trim( option_path_python ) ) then
+
+#ifdef HAVE_NUMPY
+         ewrite(3,*) "Have both NumPy and a python eos..."
+#else
+         FLAbort("Python eos requires NumPy, which cannot be located.")
+#endif
+
+         density => extract_scalar_field( state( iphase ), "Density" )         
+         call zero( density )
+
+         call python_reset()
+         call python_add_state( state( iphase ) )
+
+         call python_run_string("field = state.scalar_fields['Density']")
+         call get_option("/timestepping/current_time", current_time)
+         write(buffer,*) current_time
+         call python_run_string("time="//trim(buffer))
+         call get_option("/timestepping/timestep", dt)
+         write(buffer,*) dt
+         call python_run_string("dt="//trim(buffer))  
+
+         ! Get the code
+         call get_option( trim( option_path_python ) // '/algorithm', pycode )
+
+         ! Run the code
+         call python_run_string( trim( pycode ) )
+
+         ! Copy result to protoype memory
+         Rho = density % val
+
+         ! Back up pressure and density before we start perturbing stuff... 
+         allocate( pressure_back_up( node_count( pressure ) ), density_back_up( node_count( pressure ) ) )
+         pressure_back_up = 0. ; density_back_up = 0.
+         pressure_back_up = pressure % val
+         density_back_up = density % val
+
+         call python_reset()
+
+         ! Calculating dRho / dP
+         ! redefine p as p+pert and p-pert and then run python state again to get dRho / d P...
+         perturbation_pressure = 1.e-5
+
+         pressure % val = pressure % val + perturbation_pressure
+         call zero( density )
+
+         call python_reset()
+         call python_add_state( state( iphase ) )
+
+         call python_run_string("field = state.scalar_fields['Density']")
+
+         call get_option("/timestepping/current_time", current_time)
+         write(buffer,*) current_time
+         call python_run_string("time="//trim(buffer))
+         call get_option("/timestepping/timestep", dt)
+         write(buffer,*) dt
+         call python_run_string("dt="//trim(buffer))  
+
+         call python_run_string(trim(pycode))
+         RhoPlus = density % val
+
+         call python_reset()
+
+         pressure % val = pressure_back_up
+         pressure % val = pressure % val - perturbation_pressure
+         call zero( density )
+
+         call python_reset()
+         call python_add_state( state( iphase ) )
+
+         call python_run_string("field = state.scalar_fields['Density']")
+
+         call get_option("/timestepping/current_time", current_time)
+         write(buffer,*) current_time
+         call python_run_string("time="//trim(buffer))
+         call get_option("/timestepping/timestep", dt)
+         write(buffer,*) dt
+         call python_run_string("dt="//trim(buffer))
+
+         call python_run_string(trim(pycode))
+         RhoMinus = density % val
+
+         call python_reset()
+
+         ! derivative
+         dRhodP = 0.5 * ( RhoPlus - RhoMinus ) / perturbation_pressure
+
+         ! Restore pressure and density values in state
+         pressure % val = pressure_back_up
+         density % val = density_back_up
+
+         deallocate( pressure_back_up, density_back_up )
+
+      else
+         FLAbort( 'No option given for choice of EOS' )
+      end if Conditional_EOS_Option
+
+      deallocate( perturbation_pressure, RhoPlus, RhoMinus )
+
+    end subroutine Calculate_Rho_dRhodP
+
+
+    subroutine Density_Polynomial( eos_coefs, pressure, temperature, &
+         Density_Field )
+      implicit none
+      real, dimension( : ), intent( in ) :: eos_coefs, pressure, temperature
+      real, dimension( : ), intent( inout ) :: Density_Field
+
+      Density_Field = eos_coefs( 1 ) + eos_coefs( 2 ) * pressure + eos_coefs( 3 ) * temperature + &
+           eos_coefs( 4 ) * pressure * temperature + eos_coefs( 5 ) * pressure **2 + &
+           eos_coefs( 6 ) * temperature **2 + eos_coefs( 7 ) * ( pressure ** 2 ) * temperature + &
+           eos_coefs( 8 ) * ( temperature ** 2 ) * pressure + &
+           eos_coefs( 9 ) * ( temperature ** 2 ) * ( pressure ** 2 )
 
       return
-    end subroutine Calculate_Phase_Component_Densities
+    end subroutine Density_Polynomial
 
 
     subroutine Assign_Equation_of_State( eos_option_path_out )
@@ -202,401 +581,6 @@
       return
     end subroutine Assign_Equation_of_State
 
-    subroutine Computing_Perturbation_Density( state, &
-         iphase, nstate_init, nstate_final, eos_option_path, &
-         DensityComponent_Field, &
-         Derivative_DensityComponent_Pressure, &
-         Single_Component, DensityCpComponent_Field )
-      implicit none
-      type( state_type ), dimension( : ), intent( in ) :: state
-      integer, intent( in ) :: iphase, nstate_init, nstate_final
-      character( len = option_path_len ), dimension( : ), intent( in ) :: eos_option_path
-      real, dimension( : ), intent( inout ) :: DensityComponent_Field, Derivative_DensityComponent_Pressure
-      logical, optional :: Single_Component
-      real, dimension( : ), intent( inout ), optional :: DensityCpComponent_Field
-!!$ Local variables
-      type( scalar_field ), pointer :: pressure, temperature, density, component, cp_s
-      character( len = option_path_len ) :: option_path_comp, option_path_incomp, option_path_python, &
-           option_path_component, option_path, buffer, eos_option_path_tmp
-      character( len = python_func_len ) :: pycode
-      integer :: nstates, istate, istate2, ncoef, stat
-      logical, save :: initialised = .false.
-      logical :: have_temperature_field, have_component_field
-      real, parameter :: toler = 1.0E-10
-      real, dimension( : ), allocatable, save :: reference_pressure
-      real, dimension( : ), allocatable :: Density_Field, DRho_DPressure, eos_coefs, perturbation_pressure, &
-           DensityPlus, DensityMinus, pressure_back_up, density_back_up, temperature_local, cp
-      real :: dt, current_time
-      integer :: nphase, ncomp, i
-
-!!$ Den = c1 * ( P + c2 ) / T           :: Stiffened EOS
-!!$ Den = c1 * P + c2                   :: Linear_1 EOS
-!!$ Den = c1 * P / T + c2               :: Linear_2 EOS
-!!$ Den = Den0 * exp[ c0 * ( P - P0 ) ] :: Exponential_1 EOS
-!!$ Den = c0 * P** c1                   :: Exponential_2 EOS
-
-      DensityComponent_Field = 0. ; Derivative_DensityComponent_Pressure = 0. 
-
-      nstates = option_count( '/material_phase' )
-      have_temperature_field = .false. ; have_component_field = .false.
-      do istate = 1, nstates
-         if( have_option( '/material_phase[' // int2str( istate - 1 ) // &
-              ']/scalar_field::Temperature' ) ) have_temperature_field = .true.
-         if( have_option( '/material_phase[' // int2str( istate - 1 ) // &
-              ']/is_multiphase_component' ) .and. &
-              have_option( '/material_phase[' // int2str( istate - 1 ) // &
-              ']/equation_of_state') ) have_component_field = .true.
-      end do
-      ewrite(3,*) 'have_temperature_field, have_component_field::', &
-           have_temperature_field, have_component_field
-
-      pressure => extract_scalar_field( state( 1 ), 'Pressure' )
-      if ( have_temperature_field ) &
-           temperature => extract_scalar_field( state( iphase ), 'Temperature' )
-
-      assert( node_count( pressure ) == size( DensityComponent_Field ) )
-      allocate( Density_Field( node_count( pressure ) ), DRho_DPressure( node_count( pressure ) ) ) ; &
-           Density_Field = 0. ; DRho_DPressure = 0. 
-      allocate( perturbation_pressure( node_count( pressure ) ) ) ; perturbation_pressure = 0.
-      allocate( DensityPlus( node_count( pressure ) ), DensityMinus( node_count( pressure ) ) ) ; &
-           DensityPlus = 0. ; DensityMinus = 0.
-
-      Loop_Over_States: do istate = nstate_init, nstate_final
-         if( nstate_final == 1 ) then ! Phase density -- no components.
-            istate2 = iphase
-         else
-            if( have_component_field ) then ! Component fields
-               istate2 = istate 
-               option_path_component = '/material_phase['  // int2str( istate2 - 1 ) // ']/is_multiphase_component'
-               component => extract_scalar_field( state( istate2 ), 'ComponentMassFractionPhase' // &
-                    int2str( iphase ) )
-            end if
-         end if
-
-         if ( present_and_true( single_component ) ) then
-
-            ncomp = 0
-            do i = 1, size( state )
-               if( have_option( '/material_phase[' // int2str( i - 1) // ']/is_multiphase_component' ) )then
-                  ncomp = ncomp + 1
-               end if
-            end do
-            nphase = size( state ) - ncomp
-
-            option_path_comp   = trim( '/material_phase['  // int2str( nphase + nstate_init - 1 ) // ']/equation_of_state/compressible' )
-            option_path_incomp = trim( '/material_phase['  // int2str( nphase + nstate_init  - 1 ) // ']/equation_of_state/incompressible' )
-            option_path_python = trim( '/material_phase['  // int2str( nphase + nstate_init - 1 ) // ']/equation_of_state/python_state' )
-
-            eos_option_path_tmp = trim( eos_option_path( 1 ) )
-
-         else
-
-            option_path_comp   = trim( '/material_phase['  // int2str( istate2 - 1 ) // ']/equation_of_state/compressible' )
-            option_path_incomp = trim( '/material_phase['  // int2str( istate2 - 1 ) // ']/equation_of_state/incompressible' )
-            option_path_python = trim( '/material_phase['  // int2str( istate2 - 1 ) // ']/equation_of_state/python_state' )
-            eos_option_path_tmp = trim( eos_option_path( istate2 ) )
-
-         end if
-
-         Conditional_EOS_Option: if( trim( eos_option_path_tmp ) == trim( option_path_comp ) // '/stiffened_gas' ) then
-!!$ Den = C0 / T * ( P - C1 )
-            if( .not. have_temperature_field ) FLAbort( 'Temperature Field not defined' )
-            allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
-            call get_option( trim( eos_option_path_tmp // '/eos_option1' ), eos_coefs( 1 ) )
-            call get_option( trim( eos_option_path_tmp // '/eos_option2' ), eos_coefs( 2 ) )
-            Density_Field = ( pressure % val + eos_coefs( 1 ) ) * eos_coefs( 2 ) / temperature % val
-            perturbation_pressure = max( toler, 1.e-3 * ( abs( pressure % val ) + eos_coefs( 1 ) ) )
-            DensityPlus = ( pressure % val + perturbation_pressure + eos_coefs( 1 ) ) *  eos_coefs( 2 ) / &
-                 temperature % val
-            DensityMinus = ( pressure % val - perturbation_pressure + eos_coefs( 1 ) ) *  eos_coefs( 2 ) / &
-                 temperature % val
-            DRho_DPressure = 0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-            deallocate( eos_coefs )
-
-         elseif( trim( eos_option_path_tmp ) == trim( option_path_comp ) // '/linear_in_pressure' ) then
-!!$ Den = C0 * P +C1
-            allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
-            call get_option( trim( eos_option_path_tmp ) // '/coefficient_A', eos_coefs( 1 ) )
-            call get_option( trim( eos_option_path_tmp ) // '/coefficient_B', eos_coefs( 2 ) )
-            Density_Field = eos_coefs( 1 ) * pressure % val + eos_coefs( 2 )
-            perturbation_pressure = 1.
-            !DensityPlus = eos_coefs( 1 ) * ( pressure % val + perturbation_pressure ) + eos_coefs( 2 )
-            !DensityMinus = eos_coefs( 1 ) * ( pressure % val - perturbation_pressure ) + eos_coefs( 2 )
-            DRho_DPressure = eos_coefs( 1 ) !0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-            deallocate( eos_coefs )
-
-         elseif( trim( eos_option_path_tmp ) == trim( option_path_comp ) // '/linear_in_pressure/include_internal_energy' ) then
-!!$ Den = C0 * P/T +C1
-            if( .not. have_temperature_field ) FLAbort( 'Temperature Field not defined' )
-            allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
-            call get_option( trim( option_path_comp ) // '/linear_in_pressure/coefficient_A', eos_coefs( 1 ) )
-            call get_option( trim( option_path_comp ) // '/linear_in_pressure/coefficient_B', eos_coefs( 2 ) )
-            Density_Field = eos_coefs( 1 ) * pressure % val / temperature % val + eos_coefs( 2 )
-            perturbation_pressure = 1.
-            !DensityPlus = eos_coefs( 1 ) * ( pressure % val + perturbation_pressure ) / &
-            !     ( max( toler, temperature % val ) ) + eos_coefs( 2 )
-            !DensityMinus = eos_coefs( 1 ) * ( pressure % val - perturbation_pressure ) / &
-            !     ( max( toler, temperature % val ) ) + eos_coefs( 2 )
-            DRho_DPressure =  eos_coefs( 1 ) / temperature % val !0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-            deallocate( eos_coefs )
-
-         elseif( trim( eos_option_path_tmp ) == trim( option_path_comp ) // '/exponential_oil_gas' ) then
-!!$ Den = Den0 * Exp[ C0 * ( P - P0 ) ]
-            allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
-            call get_option( trim( eos_option_path_tmp ) // '/compressibility', eos_coefs( 1 ) )   ! compressibility_factor 
-            call get_option( trim( eos_option_path_tmp ) // '/reference_density', eos_coefs( 2 ) ) ! reference_density 
-            if ( .not. initialised ) then
-               allocate( reference_pressure( node_count( pressure ) ) )
-               reference_pressure = pressure % val
-               initialised = .true.
-            end if
-            Density_Field = eos_coefs( 2 ) * exp( eos_coefs( 1 ) * ( pressure % val - reference_pressure ) )
-            perturbation_pressure = max( toler, 1.e-3 * ( abs( pressure % val ) ) )
-            DensityPlus = eos_coefs( 2 ) * exp( eos_coefs( 1 ) * ( ( pressure % val + perturbation_pressure ) - &
-                 reference_pressure ) ) 
-            DensityMinus = eos_coefs( 2 ) * exp( eos_coefs( 1 ) * ( ( pressure % val - perturbation_pressure ) - &
-                 reference_pressure ) ) 
-            DRho_DPressure = 0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-            deallocate( eos_coefs )
-
-         elseif( trim( eos_option_path_tmp ) == trim( option_path_comp ) // '/exponential_in_pressure' ) then 
-!!$ Den = C0 * ( P ^ C1 )
-            allocate( eos_coefs( 2 ) ) ; eos_coefs = 0.
-            call get_option( trim( eos_option_path_tmp ) // '/coefficient_A', eos_coefs( 1 ) )
-            call get_option( trim( eos_option_path_tmp ) // '/coefficient_B', eos_coefs( 2 ) )
-            Density_Field = eos_coefs( 1 ) * pressure % val ** eos_coefs( 2 )
-            perturbation_pressure = 1.
-            DensityPlus = eos_coefs( 1 ) * ( pressure % val + perturbation_pressure ) ** eos_coefs( 2 )
-            DensityMinus = eos_coefs( 1 ) * ( pressure % val - perturbation_pressure ) ** eos_coefs( 2 )
-            DRho_DPressure = 0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-            deallocate( eos_coefs )
-
-         elseif( trim( eos_option_path_tmp ) == trim( option_path_incomp ) // '/linear' ) then
-!!$ Polynomial representation
-            allocate( temperature_local( node_count( pressure ) ) ) ; temperature_local = 0.
-            if ( have_temperature_field ) temperature_local = temperature % val
-            ncoef = 10 ; allocate( eos_coefs( ncoef ) ) ; eos_coefs = 0.
-            if( have_option( trim( eos_option_path_tmp ) // '/all_equal' ) ) then
-               call get_option( trim( eos_option_path_tmp ) // '/all_equal', eos_coefs( 1 ) )
-               eos_coefs( 2 : 10 ) = 0.
-            elseif( have_option( trim( eos_option_path_tmp ) // '/specify_all' ) ) then
-               call get_option( trim( eos_option_path_tmp ) // '/specify_all', eos_coefs )
-            else
-               FLAbort('Unknown incompressible linear equation of state')
-            end if
-            call Density_Polynomial( eos_coefs, pressure % val, temperature_local, &
-                 Density_Field )
-            perturbation_pressure = max( toler, 1.e-3 * abs( pressure % val ) )
-            call Density_Polynomial( eos_coefs, pressure % val + perturbation_pressure, temperature_local, &
-                 DensityPlus )
-            call Density_Polynomial( eos_coefs, pressure % val - perturbation_pressure, temperature_local, &
-                 Densityminus )
-            DRho_DPressure = 0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-            deallocate( temperature_local, eos_coefs )
-
-         elseif( trim( eos_option_path_tmp ) == trim( option_path_python ) ) then
-
-#ifdef HAVE_NUMPY
-            ewrite(3,*) "Have both NumPy and a python eos..."
-#else
-            FLAbort("Python eos requires NumPy, which cannot be located.")
-#endif
-
-            density => extract_scalar_field( state( iphase ), "Density" )         
-            call zero( density )
-
-            call python_reset()
-            call python_add_state( state( iphase ) )
-
-            call python_run_string("field = state.scalar_fields['Density']")
-            call get_option("/timestepping/current_time", current_time)
-            write(buffer,*) current_time
-            call python_run_string("time="//trim(buffer))
-            call get_option("/timestepping/timestep", dt)
-            write(buffer,*) dt
-            call python_run_string("dt="//trim(buffer))  
-
-            ! Get the code
-            call get_option( trim( option_path_python ) // '/algorithm', pycode )
-
-            ! Run the code
-            call python_run_string( trim( pycode ) )
-
-            ! Copy result to protoype memory
-            Density_Field = density % val
-
-            ! Back up pressure and density before we start perturbing stuff... 
-            allocate( pressure_back_up( node_count( pressure ) ), density_back_up( node_count( pressure ) ) )
-            pressure_back_up = 0. ; density_back_up = 0.
-            pressure_back_up = pressure % val
-            density_back_up = density % val
-
-            call python_reset()
-
-            ! Calculating d(den) / dP
-            ! redefine p as p+pert and p-pert and then run python state again to get the d(den) / d P...
-            perturbation_pressure = 1.e-5
-
-            pressure % val = pressure % val + perturbation_pressure
-            call zero( density )
-
-            call python_reset()
-            call python_add_state( state( iphase ) )
-
-            call python_run_string("field = state.scalar_fields['Density']")
-
-            call get_option("/timestepping/current_time", current_time)
-            write(buffer,*) current_time
-            call python_run_string("time="//trim(buffer))
-            call get_option("/timestepping/timestep", dt)
-            write(buffer,*) dt
-            call python_run_string("dt="//trim(buffer))  
-
-            call python_run_string(trim(pycode))
-            DensityPlus = density % val
-
-            call python_reset()
-
-            pressure % val = pressure_back_up
-            pressure % val = pressure % val - perturbation_pressure
-            call zero( density )
-
-            call python_reset()
-            call python_add_state( state( iphase ) )
-
-            call python_run_string("field = state.scalar_fields['Density']")
-
-            call get_option("/timestepping/current_time", current_time)
-            write(buffer,*) current_time
-            call python_run_string("time="//trim(buffer))
-            call get_option("/timestepping/timestep", dt)
-            write(buffer,*) dt
-            call python_run_string("dt="//trim(buffer))
-
-            call python_run_string(trim(pycode))
-            DensityMinus = density % val
-
-            call python_reset()
-
-            ! derivative
-            DRho_DPressure = 0.5 * ( DensityPlus - DensityMinus ) / perturbation_pressure
-
-            ! Restore pressure and density values in state
-            pressure % val = pressure_back_up
-            density % val = density_back_up
-
-            deallocate( pressure_back_up, density_back_up )
-
-         else
-            FLAbort( 'No option given for choice of EOS' )
-         end if Conditional_EOS_Option
-
-         if ( present_and_true( single_component ) ) then
-
-            DensityComponent_Field = Density_Field
-            Derivative_DensityComponent_Pressure = DRho_DPressure / DensityComponent_Field
-
-         else
-
-            if( have_component_field ) then
-
-               cp_s => extract_scalar_field( state( istate2 ), &
-                    'ComponentMassFractionPhase' // int2str( iphase ) // 'HeatCapacity', stat  )
-
-               allocate( cp( node_count( pressure ) ) ) ; cp = 1.
-               if( stat == 0 ) cp = cp_s % val
-
-               DensityComponent_Field = DensityComponent_Field + Density_Field * component % val
-
-               if ( present( DensityCpComponent_Field ) ) &
-                    DensityCpComponent_Field = DensityCpComponent_Field + Density_Field * component % val * cp
-
-               Derivative_DensityComponent_Pressure = Derivative_DensityComponent_Pressure + &
-                    DRho_DPressure * component % val
-
-               deallocate( cp )
-
-            else
-               DensityComponent_Field = Density_Field
-               Derivative_DensityComponent_Pressure = DRho_DPressure
-               if ( present( DensityCpComponent_Field ) ) DensityCpComponent_Field = Density_Field
-            end if
-
-         end if
-
-      end do Loop_Over_States
-
-      deallocate( perturbation_pressure, DensityPlus, DensityMinus )
-
-      return
-    end subroutine Computing_Perturbation_Density
-
-    subroutine Density_Polynomial( eos_coefs, pressure, temperature, &
-         Density_Field )
-      implicit none
-      real, dimension( : ), intent( in ) :: eos_coefs, pressure, temperature
-      real, dimension( : ), intent( inout ) :: Density_Field
-
-      Density_Field = eos_coefs( 1 ) + eos_coefs( 2 ) * pressure + eos_coefs( 3 ) * temperature + &
-           eos_coefs( 4 ) * pressure * temperature + eos_coefs( 5 ) * pressure **2 + &
-           eos_coefs( 6 ) * temperature **2 + eos_coefs( 7 ) * ( pressure ** 2 ) * temperature + &
-           eos_coefs( 8 ) * ( temperature ** 2 ) * pressure + &
-           eos_coefs( 9 ) * ( temperature ** 2 ) * ( pressure ** 2 )
-
-      return
-    end subroutine Density_Polynomial
-
-
-
-    SUBROUTINE CAL_CPDEN( NPHASE, CV_NONODS, CV_PHA_NONODS, CPDEN, DEN, NCP_COEFS, &
-         CP_COEFS, CP_OPTION, STOTEL, CV_SNLOC, SUF_CPD_BCU, SUF_D_BCU ) 
-
-      ! This sub calculates the CPDEN ie. CP*DEN
-      IMPLICIT NONE
-      INTEGER, intent( in ) :: NPHASE, CV_NONODS, CV_PHA_NONODS, NCP_COEFS, STOTEL, CV_SNLOC
-      REAL, DIMENSION( CV_PHA_NONODS ), intent( in ) :: DEN
-      REAL, DIMENSION( CV_PHA_NONODS ), intent( inout ) :: CPDEN
-      REAL, DIMENSION( STOTEL * CV_SNLOC * NPHASE ), intent( in ) :: SUF_D_BCU
-      REAL, DIMENSION( STOTEL * CV_SNLOC * NPHASE ), intent( inout ) :: SUF_CPD_BCU
-      REAL, DIMENSION( NPHASE, NCP_COEFS ), intent( in ) :: CP_COEFS
-      INTEGER, DIMENSION( NPHASE ), intent( in ) ::  CP_OPTION
-      ! Local
-      INTEGER :: IPHASE, CV_NOD, CV_NOD_IPHA, IS_IPHA, II
-
-      Loop_Phase1: DO IPHASE = 1, NPHASE
-
-         Loop_CV: DO CV_NOD = 1, CV_NONODS
-
-            CV_NOD_IPHA = CV_NOD + ( IPHASE - 1 ) * CV_NONODS
-
-            IF( CP_OPTION( IPHASE ) == 1 ) THEN
-               CPDEN( CV_NOD_IPHA ) = CP_COEFS( IPHASE, 1 ) * DEN( CV_NOD_IPHA )
-            ELSE
-               FLAbort("Invalid integer for Element CP_Coefs")
-            ENDIF
-
-         END DO Loop_CV
-
-      END DO Loop_Phase1
-
-      ! For the b.c's
-      Loop_Surfaces: DO II = 1, STOTEL * CV_SNLOC
-
-         Loop_Phase2: DO IPHASE = 1, NPHASE
-            IS_IPHA = II + ( IPHASE - 1 ) * NPHASE
-
-            IF( CP_OPTION( IPHASE ) == 1 ) THEN
-               SUF_CPD_BCU( IS_IPHA ) = CP_COEFS( IPHASE, 1 ) * SUF_D_BCU( IS_IPHA )
-            ELSE
-               FLAbort("Invalid integer for Surface CP_Coefs")
-            ENDIF
-
-         END DO Loop_Phase2
-      END DO Loop_Surfaces
-
-      RETURN
-
-    END SUBROUTINE CAL_CPDEN
 
 
 
@@ -886,13 +870,14 @@
        INTEGER, DIMENSION( TOTELE * CV_NLOC ), intent( in ) :: CV_NDGLN
       INTEGER, DIMENSION( TOTELE * MAT_NLOC ), intent( in ) :: MAT_NDGLN
 
-       type(scalar_field), pointer :: volume_fraction
+       type(mesh_type), pointer :: mesh
        integer :: ELE,IPHASE,IDIM,JPHASE,JDIM,I,J,MAT_NOD,ICV_LOC
        integer, dimension(:), pointer :: nodes
 
-       volume_fraction=>extract_scalar_field(state,"PhaseVolumeFraction")
+       mesh=>extract_mesh(state,"PressureMesh_Discontinuous")
 
        DO ELE=1,TOTELE
+          nodes=>ele_nodes(mesh,ele)
           do ICV_LOC=1,CV_NLOC
              MAT_NOD = MAT_NDGLN(( ELE - 1 ) * MAT_NLOC+ICV_LOC)
              DO IPHASE=1,NPHASE
@@ -902,7 +887,7 @@
                       DO JDIM=1,NDIM
                          J=(JPHASE-1)*NDIM+JDIM
                          U_ABSORB(MAT_NOD,I,J)=U_ABSORB(MAT_NOD,I,J)+&
-                              val(drag_abs_matrix,I,J,mat_nod,mat_nod)
+                              val(drag_abs_matrix,I,J,nodes(ICV_LOC),nodes(ICV_LOC))
                       end DO
                    end Do
                 end DO
@@ -921,8 +906,9 @@
       type(vector_field), pointer :: continuous_velocity, dispersed_velocity 
       integer, intent(in) :: dispersed_phase, continuous_phase
       type(drag_option_type) :: drag_options
-      type(scalar_field), pointer :: continuous_volume_fraction, dispersed_volume_fraction
-      type(scalar_field) :: ratio, coeff
+      type(scalar_field), pointer :: continuous_volume_fraction, dispersed_volume_fraction,rho_g
+      type(tensor_field),pointer :: mu_g
+      type(scalar_field) :: ratio, coeff, CVF_DG,DVF_DG,Re_s
       type(vector_field) :: deltaV
       type(mesh_type), pointer :: mesh
 
@@ -944,14 +930,20 @@
       ndim=continuous_velocity%dim
       continuous_volume_fraction=>extract_scalar_field(state(continuous_phase),"PhaseVolumeFraction",stat)
       dispersed_volume_fraction=>extract_scalar_field(state(dispersed_phase),"PhaseVolumeFraction",stat)
+      mu_g=>extract_tensor_field(state(continuous_phase),"Viscosity",stat)
+      rho_g=>extract_scalar_field(state(continuous_phase),"Density",stat)
       nloc=ele_loc(continuous_volume_fraction,1)
 
-      call allocate(ratio,continuous_volume_fraction%mesh,"RatioOfVolumeFractions")
+      call allocate(CVF_DG,mesh,"CVF_DG")
+      call allocate(DVF_DG,mesh,"CVF_DG")
+      call remap_field(continuous_volume_fraction,CVF_DG)
+      call remap_field(dispersed_volume_fraction,DVF_DG)
+      call allocate(ratio,mesh,"RatioOfVolumeFractions")
       call zero(ratio)
-      call set(ratio,continuous_volume_fraction)
+      call set(ratio,CVF_DG)
       call invert(ratio)
-      call bound(ratio,1.0d0,huge(0.0))
-      call scale(ratio,dispersed_volume_fraction)
+      call scale(ratio,DVF_DG)
+      call bound(ratio,0.0d0,1.0e12)
 
       select case(drag_options%type)
       case(0)
@@ -963,10 +955,10 @@
             do ele=1,ele_count(continuous_volume_fraction)
                nodes=>ele_nodes(continuous_volume_fraction,ele)
                dg_nodes=>ele_nodes(mesh,ele)
-               call addto_diag(absorption,block1,block1,dg_nodes, coeff%val(nodes)*ratio%val(nodes))
-               call addto_diag(absorption,block1,block2,dg_nodes,-coeff%val(nodes)*ratio%val(nodes))
-               call addto_diag(absorption,block2,block1,dg_nodes,-coeff%val(nodes))
-               call addto_diag(absorption,block2,block2,dg_nodes, coeff%val(nodes))
+               call addto_diag(absorption,block1,block1,dg_nodes, coeff%val(nodes)*ratio%val(dg_nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,-coeff%val(nodes)*ratio%val(dg_nodes))
+               call addto_diag(absorption,block2,block1,dg_nodes,-coeff%val(dg_nodes))
+               call addto_diag(absorption,block2,block2,dg_nodes, coeff%val(dg_nodes))
             end do
          end do
          call deallocate(coeff)
@@ -978,8 +970,8 @@
             do ele=1,ele_count(continuous_volume_fraction)
                nodes=>ele_nodes(continuous_volume_fraction,ele)
                dg_nodes=>ele_nodes(mesh,ele)
-               call addto_diag(absorption,block1,block1,dg_nodes, cval*ratio%val(nodes))
-               call addto_diag(absorption,block1,block2,dg_nodes,-cval*ratio%val(nodes))
+               call addto_diag(absorption,block1,block1,dg_nodes, cval*ratio%val(dg_nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,-cval*ratio%val(dg_nodes))
                call addto_diag(absorption,block2,block1,dg_nodes,spread(-cval,1,nloc))
                call addto_diag(absorption,block2,block2,dg_nodes,spread( cval,1,nloc))
             end do
@@ -1026,21 +1018,32 @@
 
          call deallocate(deltaV)
 
-
          case(3)
          call allocate(deltaV,ndim,mesh,"DeltaV")
          call allocate(coeff,mesh,"Drag")
+         call allocate(Re_s,mesh,"Drag")
          call remap_field(continuous_velocity,deltaV)
          call addto(deltaV,dispersed_velocity, scale=-1.0)
 
-         cval=3.0d0/(4.0d0*drag_options%diameter)
-         call remap_field(continuous_volume_fraction,coeff)
 
-         coeff%val=24.0*cval/drag_options%Re_s&
-              *(1.0d0+0.15*(coeff%val)**0.687)&
-              *sum(sqrt(deltaV%val(:,dg_nodes)*deltaV%val(:,dg_nodes)),dim=1)&
-              *coeff%val**(-2.65)
+         do ele=1,ele_count(continuous_volume_fraction)
+            nodes=>ele_nodes(mu_g,ele)
+            dg_nodes=>ele_nodes(mesh,ele)
+            Re_s%val(dg_nodes)=rho_g%val(nodes)/mu_g%val(1,1,1)
+         end do
+         Re_s%val=Re_s%val*sqrt(sum(deltaV%val**2,dim=1))*drag_options%diameter
+         call scale(Re_s,CVF_DG)
 
+         coeff%val=merge(0.44,24.0/Re_s%val&
+              *(1.0d0+0.15*(Re_S%val)**0.687)&
+              ,Re_s%val>1000.0)
+         call bound(coeff,0.0d0,1.0e12)
+
+         coeff%val=3.0/4.0*coeff%val*sqrt(sum(deltaV%val**2,dim=1))&
+              /drag_options%diameter&
+              *CVF_DG%val**(-2.65)
+
+         print*, maxval(coeff%val), minval(coeff%val), minval(Re_s)
          
          do IDIM=1,ndim
             block1=(continuous_phase-1)*ndim+IDIM
@@ -1049,15 +1052,18 @@
                nodes=>ele_nodes(continuous_volume_fraction,ele)
                dg_nodes=>ele_nodes(mesh,ele)
 
-               call addto_diag(absorption,block1,block1,dg_nodes, coeff%val(dg_nodes)*ratio%val(nodes))
-               call addto_diag(absorption,block1,block2,dg_nodes,coeff%val(dg_nodes)*ratio%val(nodes))
-               call addto_diag(absorption,block2,block1,dg_nodes,-coeff%val(dg_nodes))
-               call addto_diag(absorption,block2,block2,dg_nodes, coeff%val(dg_nodes))
+               call addto_diag(absorption,block1,block1,dg_nodes, rho_g%val(nodes)*coeff%val(dg_nodes)*DVF_DG%val(dg_nodes))
+               call addto_diag(absorption,block1,block2,dg_nodes,-rho_g%val(nodes)*coeff%val(dg_nodes)*DVF_DG%val(dg_nodes))
+               call addto_diag(absorption,block2,block1,dg_nodes,-rho_g%val(nodes)*coeff%val(dg_nodes)*CVF_DG%val(dg_nodes))
+               call addto_diag(absorption,block2,block2,dg_nodes, rho_g%val(nodes)*coeff%val(dg_nodes)*CVF_DG%val(dg_nodes))
             end do
          end do
 
          call deallocate(deltaV)
          call deallocate(coeff)
+         call deallocate(Re_s)
+         call deallocate(CVF_DG)
+         call deallocate(DVF_DG)
       end select
 
       call deallocate(ratio)
@@ -1098,6 +1104,10 @@
               options%diameter, default=0.001)
          call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/coefficient", &
               options%coefficient, default=0.001)
+      case("Wen&Yu")
+         options%type=3
+         call get_option("/material_phase["//int2str(phase-1)//"]/multiphase_properties/drag/diameter", &
+              options%diameter, default=0.001)
       case default
          FLAbort("Unknown drag type in phase "//state(phase)%name)
       end select

@@ -513,8 +513,8 @@
       if( .not. is_overlapping ) v_dg_vel_int_opt = 1
       comp_diffusion_opt = 0 ; ncomp_diff_coef = 0
       volfra_use_theta_flux = .false. ; volfra_get_theta_flux = .true.
-      comp_use_theta_flux = .false.   ; comp_get_theta_flux = .true.
-      t_use_theta_flux = .false.      ; t_get_theta_flux = .true.
+      comp_use_theta_flux = .false. ; comp_get_theta_flux = .true.
+      t_use_theta_flux = .false. ; t_get_theta_flux = .true.
 
 !!$ IN/DG_ELE_UPWIND are options for optimisation of upwinding across faces in the overlapping
 !!$ formulation. The data structure and options for this formulation need to be added later. 
@@ -1081,7 +1081,7 @@
                   face_nodes = ele_nodes( field_prot_bc, sele )
                   do kk = 1, snloc
                      suf_bc( ( iphase - 1 ) * stotel * snloc + ( j - 1 ) * snloc + kk ) = &
-                          field_prot_bc % val( face_nodes( 1 ) )
+                          field_prot_bc % val( face_nodes( kk ) )
                   end do
                   sele = sele + 1
                end if
@@ -1219,7 +1219,7 @@
                   do kk = 1, snloc
                      suf_bc( ( icomp - ( nphase + 1 ) ) * nphase * stotel * snloc + &
                           ( iphase - 1 ) * stotel * snloc + ( j - 1 ) * snloc + kk ) = &
-                          field_prot_bc % val( face_nodes( 1 ) )
+                          field_prot_bc % val( face_nodes( kk ) )
                   end do
                   sele = sele + 1
                end if
@@ -1277,8 +1277,10 @@
       type(vector_field), pointer :: positions, field_source, field_absorption
       type(scalar_field), pointer :: pressure
       integer, dimension(:), allocatable :: sufid_bc, face_nodes
+      integer, dimension(:), pointer :: surface_element_list
+
       character( len = option_path_len ) :: option_path, option_path2, field_name, bct
-      integer :: ndim, stotel, snloc, snloc2, nonods, nobcs, bc_type, j, k, kk, l, &
+      integer :: ndim, stotel, snloc, snloc2, nonods, nobcs, bc_type, j, jj,  k, kk, l, &
            shape_option( 2 ), count, u_nonods, idim, stat
       real, dimension( : ), allocatable :: initial_constant
       logical :: have_source, have_absorption
@@ -1372,14 +1374,13 @@
 
       option_path = '/material_phase[' // int2str( iphase - 1 )// ']/vector_field::' // trim( field_name )
 
-      print*, trim(option_path)
-
       option_path2 = trim( option_path ) // '/prognostic/boundary_conditions['
 
       nobcs = get_boundary_condition_count( field )
       Loop_BC: do k = 1, nobcs
 
          field_prot_bc => extract_surface_field( field, k, 'value' )
+         surface_element_list => field%bc%boundary_condition(k)%surface_element_list
 
          option_path = trim( option_path2 ) // int2str( k - 1 ) // ']/surface_ids'
          shape_option = option_shape( trim( option_path ) )
@@ -1395,18 +1396,21 @@
 
             BC_Type = 1
 
+            do jj = 1, ele_count(field_prot_bc)
+               j=surface_element_list(jj)
+               face_nodes=ele_nodes(field_prot_bc,jj)
 
 
-            face_nodes = (/ ( l, l = 1, snloc2 ) /)
-            do j = 1, stotel
                if( any ( sufid_bc == field % mesh % faces % boundary_ids( j ) ) ) then 
                   wic_bc( j  + ( iphase - 1 ) * stotel ) = BC_Type
                   count = 1
 
                   do kk = 1, snloc
 
+!                    print*, count, face_nodes(count), snloc2, size(field_prot_bc%val,2)
+
                      suf_u_bc( ( iphase - 1 ) * stotel * snloc + ( j - 1 ) * snloc + kk ) = &
-                          field_prot_bc % val( 1, face_nodes( count ) )
+                         field_prot_bc % val( 1, face_nodes( count ) )
 
                      if( ndim > 1 ) suf_v_bc( ( iphase - 1 ) * stotel * snloc + & 
                           ( j - 1 ) * snloc + kk ) = field_prot_bc % val( 2, face_nodes( count ) )
@@ -1415,7 +1419,6 @@
                      count = count + 1
                      if ( mod( kk, snloc2 ) == 0. ) count = 1
                   end do
-                  face_nodes = face_nodes + snloc2
                end if
             end do
 
@@ -1430,8 +1433,10 @@
                FLAbort( 'Wrong momentum boundary condition in diamond.' )
             end if
 
-            face_nodes = (/ ( l, l = 1, snloc2 ) /)
-            do j = 1, stotel
+
+            do jj = 1, ele_count(field_prot_bc)
+               j=surface_element_list(jj)
+               face_nodes=ele_nodes(field_prot_bc,jj)
                if( any ( sufid_bc == field % mesh % faces % boundary_ids( j ) ) ) then 
                   wic_momu_bc( j  + ( iphase - 1 ) * stotel ) = BC_Type
                   count = 1
@@ -1445,7 +1450,6 @@
                      count = count + 1
                      if ( mod( kk, snloc2 ) == 0. ) count = 1
                   end do
-                  face_nodes = face_nodes + snloc2
                end if
             end do
 

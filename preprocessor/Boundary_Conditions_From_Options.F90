@@ -407,6 +407,17 @@ contains
              call deallocate(surface_field)
           end if
 
+       CASE ("strong_no_slip")
+
+          call add_boundary_condition(field, trim(bc_name), trim(bc_type),&
+               & surface_ids, applies=applies, option_path=bc_path_i)
+          deallocate(surface_ids)
+
+          call get_boundary_condition(field, i+1, surface_mesh=surface_mesh)
+          call allocate(surface_field, field%dim, surface_mesh, name="value")
+          call insert_surface_field(field, i+1, surface_field)
+          call deallocate(surface_field)
+
        case("robin")
 
           if(have_option(trim(bc_path_i)//"/type[0]/align_bc_with_cartesian")) then
@@ -1008,6 +1019,13 @@ contains
          end if
 
          call deallocate(bc_position)
+
+         case("strong_no_slip")
+
+            call get_boundary_condition(field, i+1, surface_mesh=surface_mesh, &
+                 surface_element_list=surface_element_list)
+            surface_field => extract_surface_field(field, bc_name, name="value")
+            call zero(surface_field)
          
       case("robin")
 
