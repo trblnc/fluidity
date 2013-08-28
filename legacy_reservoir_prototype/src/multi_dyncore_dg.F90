@@ -2420,6 +2420,8 @@
       REAL :: RHS_U_CV(U_NLOC),RHS_U_CV_OLD(U_NLOC),UDEN_VFILT(NPHASE*U_NLOC),UDENOLD_VFILT(NPHASE*U_NLOC)
 
       type(scalar_field_pointer), dimension(nphase) :: PhaseVolumeFraction, OldPhaseVolumeFraction
+      logical subtract_hydrostatic
+      type(scalar_field), pointer :: hydrostatic_pressure
 
       ewrite(3,*) 'In ASSEMB_FORCE_CTY'
       !ewrite(3,*) 'Just double-checking sparsity patterns memory allocation:'
@@ -2440,6 +2442,13 @@
       call get_option( '/geometry/mesh::VelocityMesh/from_mesh/mesh_shape/element_type', &
            overlapping_path )
       if( trim( overlapping_path ) == 'overlapping' ) is_overlapping = .true.
+
+      subtract_hydrostatic=has_scalar_field(state(1),"HydrostaticPressure")
+      if (subtract_hydrostatic) then
+         print*, " subtract hydrostatic pressure"
+         hydrostatic_pressure=>extract_scalar_field(state(1),"HydrostaticPressure")
+      end if
+      
 
       mom_conserv=.false.
       call get_option( &
@@ -3791,8 +3800,19 @@ end if
                P_INOD = P_NDGLN(( ELE - 1 ) * P_NLOC + P_ILOC )
                DO GI = 1, CV_NGI
                   P_DX( GI ) = P_DX( GI ) + CVFENX( P_ILOC, GI )*P(P_INOD)
-                  IF(NDIM.GE.2) P_DY( GI ) = P_DY( GI ) + CVFENY( P_ILOC, GI )*P(P_INOD)
-                  IF(NDIM.GE.3) P_DZ( GI ) = P_DZ( GI ) + CVFENZ( P_ILOC, GI )*P(P_INOD)
+                  if (subtract_hydrostatic) &
+                        P_DX( GI ) = P_DX( GI ) - CVFENX( P_ILOC, GI )*hydrostatic_pressure%val(P_INOD)
+                  IF(NDIM.GE.2) then
+                     P_DY( GI ) = P_DY( GI ) + CVFENY( P_ILOC, GI )*P(P_INOD)
+                     if (subtract_hydrostatic) &
+                          P_DY( GI ) = P_DY( GI ) - CVFENY( P_ILOC, GI )*hydrostatic_pressure%val(P_INOD)
+                  end if
+                  IF(NDIM.GE.3) then
+                     P_DZ( GI ) = P_DZ( GI ) + CVFENZ( P_ILOC, GI )*P(P_INOD)
+                     if (subtract_hydrostatic) &
+                          P_DZ( GI ) = P_DZ( GI ) - CVFENZ( P_ILOC, GI )*hydrostatic_pressure%val(P_INOD)
+                  end if
+                  
 
                   DO IPHASE=1,NPHASE
                      if (associated(PhaseVolumeFraction(iphase)%ptr)) then

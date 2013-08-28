@@ -186,6 +186,7 @@
       !character( len = option_path_len ) :: eos_option_path( 1 )
 
       integer :: stat, istate, iphase, jphase, icomp, its, its2, cv_nodi, adapt_time_steps, cv_inod
+      integer :: adapt_spin_up
       real, dimension( : ), allocatable :: rsum
 
       real, dimension(:, :), allocatable :: DEN_CV_NOD, SUF_SIG_DIAGTEN_BC
@@ -501,6 +502,8 @@
 
       if ( have_option( '/mesh_adaptivity/hr_adaptivity' ) ) then
          call allocate( metric_tensor, extract_mesh(state(1), topology_mesh_name), 'ErrorMetric' )
+         call get_option('/mesh_adaptivity/hr_adaptivity/period_in_timesteps/spinup_time',&
+                                                                        adapt_spin_up, default=0)
       end if
 
 !!$ Starting Time Loop 
@@ -542,6 +545,13 @@
          if( have_temperature_field ) &
               call update_boundary_conditions( state, stotel, cv_snloc, nphase, & 
               Temperature_BC, suf_t_bc_rob1, suf_t_bc_rob2 )
+
+         if (.not. is_overlapping) then
+            call update_velocity_bcs(state,&
+              Velocity_U_BC, Velocity_V_BC, Velocity_W_BC, &
+              suf_momu_bc, suf_momv_bc, suf_momw_bc)
+         end if
+            
 
 !!$ Start non-linear loop
          Loop_NonLinearIteration: do its = 1, NonLinearIteration
@@ -1093,7 +1103,7 @@
 
             Conditional_Adaptivity: if( have_option( '/mesh_adaptivity/hr_adaptivity ') ) then
 
-               Conditional_Adapt_by_TimeStep: if( mod( itime, adapt_time_steps ) == 0 ) then
+               Conditional_Adapt_by_TimeStep: if( mod( itime, adapt_time_steps ) == 0 .and. (itime>adapt_spin_up)) then
 !!$               Conditional_Adapt_by_TimeStep: if( do_adapt_mesh( current_time, itime ) ) then
 !!$               Conditional_Adapt_by_TimeStep: if( do_adapt_mesh( current_time, timestep ) ) then
 

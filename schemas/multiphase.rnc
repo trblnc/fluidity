@@ -611,7 +611,10 @@ start =
 		        ## Options controlling form of drag terms for dispersed fluid-particle interactions
 			 attribute name { "Wen&Yu" },
 			 element diameter {real},
-			 element particle_Reynolds_number{real},
+			 element specified_continuum_viscosity{
+			 ## Specify a value for the continuum_phase_viscosity to be used in calculating the drag term. If this is not set, the code defaaults to using the actual viscosity field specfied in the description continuum phase
+			 real
+			 }?,
 			 comment
 		   }|element drag {
 		        ## Options controlling form of drag terms for dispersed fluid-particle interactions

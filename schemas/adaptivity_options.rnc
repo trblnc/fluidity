@@ -414,7 +414,11 @@ hr_adaptivity =
             }|
             ## Adapt period in timesteps.
             element period_in_timesteps {
-               integer
+               integer,
+	       element spinup_time {
+	       ## Spin period: Mesh adaptivity is disabled until the specified number of timesteps is attained.
+	       integer
+	       }?	
             }
          ),
          ## Time interval (in cpu time) when mesh adaptivity performed

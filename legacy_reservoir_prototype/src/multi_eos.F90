@@ -32,12 +32,16 @@
     use fldebug
     use state_module
     use fields
+    use state_module
     use global_parameters, only: OPTION_PATH_LEN, PYTHON_FUNC_LEN
     use spud
     use futils, only: int2str
     use vector_tools
     use python_state
     use Copy_Outof_State
+
+    use cv_shape_functions
+    use cv_faces
 
     use shape_functions_Linear_Quadratic
     use cv_advection
@@ -910,16 +914,21 @@
       type(tensor_field),pointer :: mu_g
       type(scalar_field) :: ratio, coeff, CVF_DG,DVF_DG,Re_s
       type(vector_field) :: deltaV
-      type(mesh_type), pointer :: mesh
+      type(mesh_type), pointer :: mesh, cv_mesh
 
       real :: cval
       integer :: node,ndim, dim,block1,block2, IDIM, stat,ele, i,nloc
       integer, dimension(:), pointer :: nodes
       integer, dimension(:), pointer :: dg_nodes
+      type(element_type) :: p_cvshape_full
 
       continuous_velocity=>extract_vector_field(state(continuous_phase),"Velocity",stat)
-      mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
 
+      
+      mesh=>extract_mesh(state(1),"PressureMesh_Continuous")
+    
+      mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
+      
       if (stat/=0) then
          FLAbort("Attempting to add drag term, when no velocity in contiuous phase")
       end if
@@ -1029,9 +1038,10 @@
          do ele=1,ele_count(continuous_volume_fraction)
             nodes=>ele_nodes(mu_g,ele)
             dg_nodes=>ele_nodes(mesh,ele)
-            Re_s%val(dg_nodes)=rho_g%val(nodes)/mu_g%val(1,1,1)
+            Re_s%val(dg_nodes)=rho_g%val(nodes)/mu_g%val(1,1,1)&
+                 *sqrt(sum(ele_val(deltaV,ele)**2)/nloc)&
+                 *drag_options%diameter
          end do
-         Re_s%val=Re_s%val*sqrt(sum(deltaV%val**2,dim=1))*drag_options%diameter
          call scale(Re_s,CVF_DG)
 
          coeff%val=merge(0.44,24.0/Re_s%val&
@@ -1039,9 +1049,21 @@
               ,Re_s%val>1000.0)
          call bound(coeff,0.0d0,1.0e12)
 
-         coeff%val=3.0/4.0*coeff%val*sqrt(sum(deltaV%val**2,dim=1))&
+
+  !       p_cvshape_full%n(1,:)=(/ 14.0/24.0,5.0/24.0,5.0/24.0 /)
+  !       p_cvshape_full%n(2,:)=(/ 5.0/24.0,14.0/24.0,5.0/24.0 /)
+  !       p_cvshape_full%n(3,:)=(/ 5.0/24.0,5.0/24.0,14.0/24.0 /)
+
+         p_cvshape_full%n=1.0/nloc
+
+         do ele=1,ele_count(continuous_volume_fraction)
+            nodes=>ele_nodes(mu_g,ele)
+            dg_nodes=>ele_nodes(mesh,ele)
+            coeff%val(dg_nodes)=3.0/4.0*coeff%val(dg_nodes)&
+                 *sqrt(sum(ele_val(deltaV,ele)**2)/nloc)&
               /drag_options%diameter&
-              *CVF_DG%val**(-2.65)
+              *CVF_DG%val(dg_nodes)**(-2.65)
+         end do
 
          print*, maxval(coeff%val), minval(coeff%val), minval(Re_s)
          
@@ -1356,12 +1378,21 @@
 
       type(vector_field), pointer :: gravity_direction
       real, dimension(ndim) :: g
-      logical :: have_gravity
+      logical :: have_gravity, subtract_hydrostatic
       real :: gravity_magnitude
+
+      type(scalar_field), pointer :: hydrostatic_density
       integer :: idim, iphase, nod, stat
 
       call get_option( "/physical_parameters/gravity/magnitude", gravity_magnitude, stat )
       have_gravity = ( stat == 0 )
+
+      subtract_hydrostatic=has_scalar_field(state(1),"HydrostaticDensity")
+      
+      if (subtract_hydrostatic) then
+         print*, "SubtractHydrostaticDensity"
+         hydrostatic_density => extract_scalar_field(state(1),"HydrostaticDensity")
+      end if
 
       if( have_gravity ) then
          gravity_direction => extract_vector_field( state( 1 ), 'GravityDirection' )
@@ -1374,9 +1405,14 @@
                do nod = 1, cv_nonods
                   u_source_cv( nod + (idim-1)*cv_nonods + ndim*cv_nonods*(iphase-1) ) = &
                        den( nod + (iphase-1)*cv_nonods ) * g( idim )
+                  if (subtract_hydrostatic) &
+                       u_source_cv( nod + (idim-1)*cv_nonods + ndim*cv_nonods*(iphase-1) ) = &
+                       u_source_cv( nod + (idim-1)*cv_nonods + ndim*cv_nonods*(iphase-1) ) &
+                       -hydrostatic_density%val( nod) * g( idim )
                end do
             end do
          end do
+
 
       else
          u_source_cv = 0.

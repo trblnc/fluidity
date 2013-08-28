@@ -799,9 +799,13 @@ Default value 2.0</a:documentation>
                     <element name="diameter">
                       <ref name="real"/>
                     </element>
-                    <element name="particle_Reynolds_number">
-                      <ref name="real"/>
-                    </element>
+                    <optional>
+                      <element name="specified_continuum_viscosity">
+                        <ref name="real">
+                          <a:documentation>Specify a value for the continuum_phase_viscosity to be used in calculating the drag term. If this is not set, the code defaaults to using the actual viscosity field specfied in the description continuum phase</a:documentation>
+                        </ref>
+                      </element>
+                    </optional>
                     <ref name="comment"/>
                   </element>
                   <element name="drag">

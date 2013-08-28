@@ -61,7 +61,7 @@
     public :: Get_Primary_Scalars, Compute_Node_Global_Numbers, Extracting_MeshDependentFields_From_State, &
          Get_ScalarFields_Outof_State, Get_CompositionFields_Outof_State, Get_VectorFields_Outof_State, &
          Extract_TensorFields_Outof_State, Extract_Position_Field, xp1_2_xp2, Get_Ele_Type, Get_Discretisation_Options, &
-         print_from_state, update_boundary_conditions
+         print_from_state, update_boundary_conditions, update_velocity_bcs
 
     interface Get_Ndgln
        module procedure Get_Scalar_Ndgln, Get_Vector_Ndgln, Get_Mesh_Ndgln
@@ -2042,6 +2042,80 @@
       end do
 
     end subroutine update_boundary_conditions
+
+    subroutine update_velocity_bcs(state,&
+              Velocity_U_BC, Velocity_V_BC, Velocity_W_BC, &
+              suf_momu_bc, suf_momv_bc, suf_momw_bc)
+
+      type(state_type), dimension(:) :: state
+      real, dimension(:), intent(inout) :: Velocity_U_BC, Velocity_V_BC, Velocity_W_BC, &
+              suf_momu_bc, suf_momv_bc, suf_momw_bc
+
+      integer :: N, iphase, nobcs, i, j , k, ele, stotel, snloc
+      type(vector_field), pointer :: velocity
+
+       type(vector_boundary_condition), pointer:: bc
+       type(vector_field), pointer:: surface_field
+
+      call set_boundary_conditions_values( state, shift_time = .true. )
+
+
+      iphase=0
+      do N=1,size(state)
+         if (.not. has_vector_field(state(N),"Velocity")) cycle
+         velocity=>extract_vector_field(state(N),"Velocity")
+         if (velocity%aliased) cycle
+         stotel = surface_element_count( velocity%mesh )
+         iphase=iphase+1
+
+         nobcs = get_boundary_condition_count( velocity )
+         Loop_BC: do k = 1, nobcs
+             bc => velocity%bc%boundary_condition(n)
+             if (trim(bc%type)=="dirichlet") then
+                surface_field => bc%surface_fields(1)
+                do ele=1, ele_count(surface_field)
+                   snloc=ele_loc(surface_field,ele)
+                   j=bc%surface_element_list(ele)
+                   Velocity_U_bc( ( iphase - 1 ) * stotel * snloc+ ( j - 1 ) * snloc+1:&
+                        ( iphase - 1 ) * stotel * snloc+ ( j )*snloc) = &
+                         surface_field % val( 1, ele_nodes(surface_field,ele ))
+                   if (mesh_dim(velocity) > 1 ) &
+                     Velocity_V_bc( ( iphase - 1 ) * stotel * snloc+ ( j - 1 ) * snloc+1:&
+                          (  iphase - 1 ) * stotel * snloc+ ( j )*snloc ) = &
+                           surface_field % val( 2, ele_nodes(surface_field,ele ))
+                   if (mesh_dim(velocity) > 2 ) &
+                        Velocity_W_bc ( ( iphase - 1 ) * stotel * snloc+ ( j - 1 ) * snloc+1:&
+                             ( iphase - 1 ) * stotel * snloc+ ( j )*snloc ) = &
+                              surface_field % val( 3, ele_nodes(surface_field,ele ))
+                end do
+
+             elseif (trim(bc%type)=="monemtum") then
+                surface_field => bc%surface_fields(1)
+                do ele=1, ele_count(surface_field)
+                   snloc=ele_loc(surface_field,ele)
+                   j=bc%surface_element_list(ele)
+                   suf_momu_bc( ( iphase - 1 ) * stotel * snloc+ ( j - 1 ) * snloc+1:&
+                        ( iphase - 1 ) * stotel * snloc+ ( j )*snloc ) = &
+                         surface_field % val( 1, ele_nodes(surface_field,ele ))
+                   if (mesh_dim(velocity) > 1 ) &
+                      suf_momv_bc( ( iphase - 1 ) * stotel * snloc+ ( j - 1 ) * snloc+1:&
+                          ( iphase - 1 ) * stotel * snloc+ ( j )*snloc) = &
+                           surface_field % val( 2, ele_nodes(surface_field,ele ))
+                   if (mesh_dim(velocity) > 2 ) &
+                         suf_momw_bc( ( iphase - 1 ) * stotel * snloc+ ( j - 1 ) * snloc+1:&
+                             ( iphase - 1 ) * stotel * snloc+ ( j )*snloc) = &
+                              surface_field % val( 3, ele_nodes(surface_field,ele ))
+                end do
+             end if
+
+          end do Loop_BC
+
+       end do
+
+     end subroutine update_velocity_bcs
+            
+
+         
 
   end module Copy_Outof_State
 

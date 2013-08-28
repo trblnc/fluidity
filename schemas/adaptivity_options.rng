@@ -476,6 +476,13 @@ Usually set to 10-20 times the timestep.</a:documentation>
         <element name="period_in_timesteps">
           <a:documentation>Adapt period in timesteps.</a:documentation>
           <ref name="integer"/>
+          <optional>
+            <element name="spinup_time">
+              <ref name="integer">
+                <a:documentation>Spin period: Mesh adaptivity is disabled until the specified number of timesteps is attained.</a:documentation>
+              </ref>
+            </element>
+          </optional>
         </element>
       </choice>
       <optional>
