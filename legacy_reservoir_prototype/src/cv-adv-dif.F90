@@ -743,7 +743,7 @@
 
 ! **********ANISOTROPIC LIMITING...*******************
       IANISOLIM=0
-      IF(CV_DISOPT.GE.5) IANISOLIM=1
+      IF(CV_DISOPT.GE.8) IANISOLIM=1
       IF (IANISOLIM==0) THEN
          ALLOCATE(TUPWIND_MAT(1), TOLDUPWIND_MAT(1), DENUPWIND_MAT(1), DENOLDUPWIND_MAT(1))
          ALLOCATE(T2UPWIND_MAT(1), T2OLDUPWIND_MAT(1))
@@ -2933,7 +2933,7 @@ END IF
 
       Conditional_PELEOT: IF( PELEOT /= PELE ) THEN
 
-         IF( ETDNEW( PELEOT ) > ETDNEW( PELE )) THEN
+         IF( ETDNEW( PELEOT ) > ETDNEW( PELE ) ) THEN
             TUPWIN = TDMAX( PELEOT )
             TUPWI2 = TDMIN( PELE )
          ELSE
@@ -2988,9 +2988,8 @@ END IF
          FTILOU = ( TDCEN - TUPWI2 ) / DENOOU
 
          ! Velocity is going out of element
-         TDLIM= INCOME*( TUPWIN + NVDFUNNEW( FTILIN, CTILIN, COURANT_OR_MINUS_ONE ) * DENOIN ) &
-              + ( 1.0 - INCOME ) * ( TUPWI2 + NVDFUNNEW( FTILOU, CTILOU, COURANT_OR_MINUS_ONE ) &
-              * DENOOU )
+         TDLIM = INCOME * ( TUPWIN + NVDFUNNEW( FTILIN, CTILIN, COURANT_OR_MINUS_ONE ) * DENOIN ) &
+              + ( 1.0 - INCOME ) * ( TUPWI2 + NVDFUNNEW( FTILOU, CTILOU, COURANT_OR_MINUS_ONE ) * DENOOU )
 
       ENDIF Conditional_FIRORD
 
@@ -3380,9 +3379,10 @@ END IF
                TILDEUF = MIN( 1.0, max( UC / (2.0 * COURAT), XI * UC ))
             ENDIF
          ELSE !For the normal limiting
-            !MAXUF = MAX( 0.0, UF )
-            MAXUF = MAX( UC, UF )
+            MAXUF = MAX( 0.0, UF )
+            !MAXUF = MAX( UC, UF )
             TILDEUF = MIN( 1.0, XI * UC, MAXUF )
+            !TILDEUF = MIN( 1.0, 3.0 * UC, MAXUF )
          ENDIF
 
       ELSE ! Outside the region 0<UC<1 on the NVD, use first-order upwinding
@@ -6634,7 +6634,7 @@ END IF
       ! If HI_ORDER_HALF then use high order interpolation when around 
       ! a volume frac of 0.5 and gradually apply limiting near 0 and 1. 
       LOGICAL, PARAMETER :: UPWIND = .TRUE., HI_ORDER_HALF = .FALSE., LIM_VOL_ADJUST2 = .TRUE.
-      LOGICAL, PARAMETER :: DOWNWIND_EXTRAP = .TRUE. ! Extrapolate a downwind value for interface tracking.
+      LOGICAL :: DOWNWIND_EXTRAP ! Extrapolate a downwind value for interface tracking.
 
       ! Scaling to reduce the downwind bias(=1downwind, =0central)
       LOGICAL, PARAMETER :: SCALE_DOWN_WIND = .true.
@@ -6672,9 +6672,13 @@ END IF
       FVT2    = 1.0
       FVT2OLD = 1.0
 
+      ! Extrapolate a downwind value for interface tracking.
+      DOWNWIND_EXTRAP = .FALSE.
+      if ( cv_disopt>=8 ) DOWNWIND_EXTRAP = .TRUE.
+
       if ( cv_disopt>=8 ) then
-         courant_or_minus_one_new = -1. !abs ( dt * ndotq / hdc )
-         courant_or_minus_one_old = -1. !abs ( dt * ndotqold / hdc )
+         courant_or_minus_one_new = abs ( dt * ndotq / hdc )
+         courant_or_minus_one_old = abs ( dt * ndotqold / hdc )
       else
          courant_or_minus_one_new = -1.0
          courant_or_minus_one_old = -1.0
@@ -7316,6 +7320,7 @@ END IF
 
                   ENDIF ! ENDOF DOWNWINDING FOR DG
                   ! END OF IF(DOWNWIND_EXTRAP.AND.(courant_or_minus_one_new.GE.0.0)) THEN ...
+
                ELSE ! Standard DG upwinding...
 
                   DO CV_KLOC = 1, CV_NLOC
@@ -7350,8 +7355,9 @@ END IF
                ENDIF
 
 
-
             ELSE ! Central DG...
+
+
                DO CV_KLOC = 1, CV_NLOC
                   CV_KLOC2 = CV_OTHER_LOC( CV_KLOC )
                   IF(CV_KLOC2 /= 0 ) THEN
@@ -7556,13 +7562,15 @@ END IF
          CALL ONVDLIM_ALL( CV_NONODS, &
               LIMT, FEMTGI, INCOME, CV_NODI_IPHA-(IPHASE-1)*CV_NONODS, CV_NODJ_IPHA-(IPHASE-1)*CV_NONODS, &
               T( CV_STAR_IPHA ), TMIN( CV_STAR_IPHA ), TMAX( CV_STAR_IPHA ), &
-              TMIN_2ND_MC( CV_STAR_IPHA ), TMAX_2ND_MC( CV_STAR_IPHA ), FIRSTORD, .not.VOF_INTER, LIMIT_USE_2ND, COURANT_OR_MINUS_ONE_NEW, &
+              TMIN_2ND_MC( CV_STAR_IPHA ), TMAX_2ND_MC( CV_STAR_IPHA ), FIRSTORD, NOLIMI, LIMIT_USE_2ND, COURANT_OR_MINUS_ONE_NEW, &
+              !TMIN_2ND_MC( CV_STAR_IPHA ), TMAX_2ND_MC( CV_STAR_IPHA ), FIRSTORD, .not.VOF_INTER, LIMIT_USE_2ND, COURANT_OR_MINUS_ONE_NEW, &
               IANISOTROPIC, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, TUPWIND_MAT(1+(IPHASE-1)*NSMALL_COLM*IANISOTROPIC) )
 
          CALL ONVDLIM_ALL( CV_NONODS, &
               LIMTOLD, FEMTOLDGI, INCOMEOLD, CV_NODI_IPHA-(IPHASE-1)*CV_NONODS, CV_NODJ_IPHA-(IPHASE-1)*CV_NONODS, &
               TOLD( CV_STAR_IPHA ), TOLDMIN( CV_STAR_IPHA ), TOLDMAX( CV_STAR_IPHA ), &
-              TOLDMIN_2ND_MC( CV_STAR_IPHA ), TOLDMAX_2ND_MC( CV_STAR_IPHA ), FIRSTORD, .not.VOF_INTER_OLD, LIMIT_USE_2ND, COURANT_OR_MINUS_ONE_OLD, &
+              TOLDMIN_2ND_MC( CV_STAR_IPHA ), TOLDMAX_2ND_MC( CV_STAR_IPHA ), FIRSTORD, NOLIMI, LIMIT_USE_2ND, COURANT_OR_MINUS_ONE_OLD, &
+              !TOLDMIN_2ND_MC( CV_STAR_IPHA ), TOLDMAX_2ND_MC( CV_STAR_IPHA ), FIRSTORD, .not.VOF_INTER_OLD, LIMIT_USE_2ND, COURANT_OR_MINUS_ONE_OLD, &
               IANISOTROPIC, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, TOLDUPWIND_MAT(1+(IPHASE-1)*NSMALL_COLM*IANISOTROPIC) )
 
          CALL ONVDLIM_ALL( CV_NONODS, &
