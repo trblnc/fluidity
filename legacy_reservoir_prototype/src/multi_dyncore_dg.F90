@@ -2330,6 +2330,8 @@
       REAL, DIMENSION ( :, :, : ), allocatable :: SLOC_NU, SLOC2_NU, SLOC_NUOLD, SLOC2_NUOLD
       REAL, DIMENSION ( : ), allocatable :: NORMX_ALL
       REAL, DIMENSION ( :, : ), allocatable :: SNORMXN_ALL
+      REAL, DIMENSION ( :, :, : ), allocatable :: U_NODJ_SGI_IPHASE, U_NODI_SGI_IPHASE
+      REAL, DIMENSION ( :, :, : ), allocatable :: UOLD_NODJ_SGI_IPHASE, UOLD_NODI_SGI_IPHASE
 
       LOGICAL :: D1, D3, DCYL, GOT_DIFFUS, GOT_UDEN, DISC_PRES, QUAD_OVER_WHOLE_ELE, &
            have_oscillation, have_oscillation_old
@@ -2358,12 +2360,7 @@
       REAL :: JTT_INV,U_GRAD_N_MAX2,V_GRAD_N_MAX2,W_GRAD_N_MAX2
       REAL :: U_R2_COEF,V_R2_COEF,W_R2_COEF
       REAL :: VLKNN
-      REAL :: U_NODJ_SGI_IPHASE, U_NODI_SGI_IPHASE, &
-           UOLD_NODJ_SGI_IPHASE, UOLD_NODI_SGI_IPHASE, &
-           V_NODJ_SGI_IPHASE, V_NODI_SGI_IPHASE, &
-           VOLD_NODJ_SGI_IPHASE, VOLD_NODI_SGI_IPHASE, &
-           W_NODJ_SGI_IPHASE, W_NODI_SGI_IPHASE, &
-           WOLD_NODJ_SGI_IPHASE, WOLD_NODI_SGI_IPHASE
+   
       INTEGER :: P_INOD, U_INOD_IPHA, U_JNOD, U_KLOC2, U_NODK2, U_NODK2_PHA, GLOBJ_IPHA, CV_INOD, CV_ILOC2, CV_INOD2
       logical firstst,NO_MATRIX_STORE
       character( len = 100 ) :: name
@@ -2724,11 +2721,11 @@
       ALLOCATE( VLK_UVW(3) )
 
       ! Variables used to reduce indirect addressing...
-      ALLOCATE( LOC_U(NDIM_VEL, NPHASE, U_NLOC),  LOC_UOLD(NDIM_VEL, NPHASE, U_NLOC) ) 
-      ALLOCATE( LOC_NU(NDIM, NPHASE, U_NLOC),  LOC_NUOLD(NDIM, NPHASE, U_NLOC) ) 
-      ALLOCATE( LOC_UDEN(NPHASE, CV_NLOC),  LOC_UDENOLD(NPHASE, CV_NLOC) ) 
-      ALLOCATE( LOC_PLIKE_GRAD_SOU_COEF(NPHASE, CV_NLOC) ) 
-      ALLOCATE( LOC_U_SOURCE_CV(NDIM_VEL, NPHASE, CV_NLOC) ) 
+      ALLOCATE( LOC_U( NDIM_VEL,NPHASE,U_NLOC ), LOC_UOLD( NDIM_VEL,NPHASE,U_NLOC ) ) 
+      ALLOCATE( LOC_NU( NDIM,NPHASE,U_NLOC ), LOC_NUOLD( NDIM,NPHASE,U_NLOC ) ) 
+      ALLOCATE( LOC_UDEN( NPHASE,CV_NLOC ), LOC_UDENOLD( NPHASE,CV_NLOC) ) 
+      ALLOCATE( LOC_PLIKE_GRAD_SOU_COEF( NPHASE,CV_NLOC ) ) 
+      ALLOCATE( LOC_U_SOURCE_CV( NDIM_VEL,NPHASE,CV_NLOC) ) 
 
       ALLOCATE( LOC_U_ABSORB(NDIM_VEL* NPHASE, NDIM_VEL* NPHASE, MAT_NLOC) ) 
       ALLOCATE( LOC_U_ABS_STAB(NDIM_VEL* NPHASE, NDIM_VEL* NPHASE, MAT_NLOC) ) 
@@ -2742,7 +2739,10 @@
       ALLOCATE( SLOC_NUOLD(NDIM,NPHASE,U_SNLOC),  SLOC2_NUOLD(NDIM,NPHASE,U_SNLOC) ) 
       ALLOCATE( NORMX_ALL(NDIM), SNORMXN_ALL(NDIM,SBCVNGI) )
 
-
+      ALLOCATE( U_NODJ_SGI_IPHASE( NDIM_VEL,NPHASE,SBCVNGI ) ) 
+      ALLOCATE( U_NODI_SGI_IPHASE( NDIM_VEL,NPHASE,SBCVNGI ) ) 
+      ALLOCATE( UOLD_NODJ_SGI_IPHASE( NDIM_VEL,NPHASE,SBCVNGI ) ) 
+      ALLOCATE( UOLD_NODI_SGI_IPHASE( NDIM_VEL,NPHASE,SBCVNGI ) ) 
 
       GOT_DIFFUS = ( R2NORM( UDIFFUSION, MAT_NONODS * NDIM * NDIM * NPHASE ) /= 0.0 )  &
            .OR. BETWEEN_ELE_STAB
@@ -4590,52 +4590,49 @@
                      END DO
 
                   END DO
-               ENDIF
+               END IF ! non-linear flux
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                ! Have a surface integral on element boundary...  
+
+
+
+               ! Calculate the velocities either side of the element...
+               U_NODJ_SGI_IPHASE=0.0 ; U_NODI_SGI_IPHASE=0.0
+               UOLD_NODJ_SGI_IPHASE=0.0 ; UOLD_NODI_SGI_IPHASE=0.0
+               DO U_SILOC = 1, U_SNLOC
+                  DO SGI=1,SBCVNGI
+                     DO IPHASE=1, NPHASE
+                        U_NODI_SGI_IPHASE(:,IPHASE,SGI) = U_NODI_SGI_IPHASE(:,IPHASE,SGI) + SBUFEN(U_SILOC,SGI) * SLOC_U(:,IPHASE,U_SILOC)
+                        U_NODJ_SGI_IPHASE(:,IPHASE,SGI) = U_NODJ_SGI_IPHASE(:,IPHASE,SGI) + SBUFEN(U_SILOC,SGI) * SLOC2_U(:,IPHASE,U_SILOC)
+                        UOLD_NODI_SGI_IPHASE(:,IPHASE,SGI) = UOLD_NODI_SGI_IPHASE(:,IPHASE,SGI) + SBUFEN(U_SILOC,SGI) * SLOC_UOLD(:,IPHASE,U_SILOC)
+                        UOLD_NODJ_SGI_IPHASE(:,IPHASE,SGI) = UOLD_NODJ_SGI_IPHASE(:,IPHASE,SGI) + SBUFEN(U_SILOC,SGI) * SLOC2_UOLD(:,IPHASE,U_SILOC)
+                     END DO
+                  END DO
+               END DO
+
+
+
                DO SGI=1,SBCVNGI
 
                   DO IPHASE=1, NPHASE
 
-                     ! Calculate the velocities either side of the element...
-                     U_NODJ_SGI_IPHASE=0.0; U_NODI_SGI_IPHASE=0.0
-                     UOLD_NODJ_SGI_IPHASE=0.0; UOLD_NODI_SGI_IPHASE=0.0
-                     V_NODJ_SGI_IPHASE=0.0; V_NODI_SGI_IPHASE=0.0
-                     VOLD_NODJ_SGI_IPHASE=0.0; VOLD_NODI_SGI_IPHASE=0.0
-                     W_NODJ_SGI_IPHASE=0.0; W_NODI_SGI_IPHASE=0.0
-                     WOLD_NODJ_SGI_IPHASE=0.0; WOLD_NODI_SGI_IPHASE=0.0
-                     DO U_SKLOC = 1, U_SNLOC
-                        U_KLOC = U_SLOC2LOC( U_SKLOC )
-                        U_NODK =U_NDGLN((ELE -1)*U_NLOC+U_KLOC)
-                        IF((ELE2==0).OR.(ELE2==ELE)) THEN ! On the surface of the domain...
-                           U_KLOC2=U_KLOC
-                           U_NODK2=U_NODK
-                        ELSE
-                           U_KLOC2=U_ILOC_OTHER_SIDE( U_SKLOC )
-                           U_NODK2=U_NDGLN((ELE2-1)*U_NLOC+U_KLOC2)
-                        ENDIF
-
-                        U_NODK_PHA =U_NODK +(IPHASE-1)*U_NONODS
-                        U_NODK2_PHA=U_NODK2+(IPHASE-1)*U_NONODS
-
-                        U_NODI_SGI_IPHASE=U_NODI_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*U(U_NODK_PHA)
-                        U_NODJ_SGI_IPHASE=U_NODJ_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*U(U_NODK2_PHA)
-                        UOLD_NODI_SGI_IPHASE=UOLD_NODI_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*UOLD(U_NODK_PHA)
-                        UOLD_NODJ_SGI_IPHASE=UOLD_NODJ_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*UOLD(U_NODK2_PHA)
-
-                        IF(NDIM_VEL.GE.2) THEN
-                           V_NODI_SGI_IPHASE=V_NODI_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*V(U_NODK_PHA)
-                           V_NODJ_SGI_IPHASE=V_NODJ_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*V(U_NODK2_PHA)
-                           VOLD_NODI_SGI_IPHASE=VOLD_NODI_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*VOLD(U_NODK_PHA)
-                           VOLD_NODJ_SGI_IPHASE=VOLD_NODJ_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*VOLD(U_NODK2_PHA)
-                        ENDIF
-                        IF(NDIM_VEL.GE.3) THEN
-                           W_NODI_SGI_IPHASE=W_NODI_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*W(U_NODK_PHA)
-                           W_NODJ_SGI_IPHASE=W_NODJ_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*W(U_NODK2_PHA)
-                           WOLD_NODI_SGI_IPHASE=WOLD_NODI_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*WOLD(U_NODK_PHA)
-                           WOLD_NODJ_SGI_IPHASE=WOLD_NODJ_SGI_IPHASE + SBUFEN(U_SKLOC,SGI)*WOLD(U_NODK2_PHA)
-                        ENDIF
-                     END DO
+ 
 
                      ! This sub should be used for stress and tensor viscocity replacing the rest...
                      IF(STRESS_FORM) THEN
@@ -4645,12 +4642,12 @@
                                 CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                 SBCVFEN,SBCVNGI,SGI, IPHASE, NDIM, UDIFFUSION, UDIFF_SUF_STAB(:,:,:,IPHASE,SGI), &
                                 HDC, &
-                                U_NODJ_SGI_IPHASE, U_NODI_SGI_IPHASE, &
-                                V_NODJ_SGI_IPHASE, V_NODI_SGI_IPHASE, &
-                                W_NODJ_SGI_IPHASE, W_NODI_SGI_IPHASE, &
-                                UOLD_NODJ_SGI_IPHASE, UOLD_NODI_SGI_IPHASE, &
-                                VOLD_NODJ_SGI_IPHASE, VOLD_NODI_SGI_IPHASE, &
-                                WOLD_NODJ_SGI_IPHASE, WOLD_NODI_SGI_IPHASE, &
+                                U_NODJ_SGI_IPHASE(1, IPHASE, SGI), U_NODI_SGI_IPHASE(1, IPHASE, SGI), &
+                                U_NODJ_SGI_IPHASE(2, IPHASE, SGI), U_NODI_SGI_IPHASE(2, IPHASE, SGI), &
+                                U_NODJ_SGI_IPHASE(3, IPHASE, SGI), U_NODI_SGI_IPHASE(3, IPHASE, SGI), &
+                                UOLD_NODJ_SGI_IPHASE(1, IPHASE, SGI), UOLD_NODI_SGI_IPHASE(1, IPHASE, SGI), &
+                                UOLD_NODJ_SGI_IPHASE(2, IPHASE, SGI), UOLD_NODI_SGI_IPHASE(2, IPHASE, SGI), &
+                                UOLD_NODJ_SGI_IPHASE(3, IPHASE, SGI), UOLD_NODI_SGI_IPHASE(3, IPHASE, SGI), &
                                 ELE, ELE2, SNORMXN,SNORMYN,SNORMZN,  &
                                 DUX_ELE, DUY_ELE, DUZ_ELE, DUOLDX_ELE, DUOLDY_ELE, DUOLDZ_ELE, &
                                 DVX_ELE, DVY_ELE, DVZ_ELE, DVOLDX_ELE, DVOLDY_ELE, DVOLDZ_ELE, &
@@ -4687,8 +4684,8 @@
                      ! *************REVIEWER 4-START*************
                      DO IDIM=1, NDIM_VEL
                         ! This if should be deleted eventually and DIFFUS_CAL_COEFF_STRESS_OR_TENSOR used instead...
-                        IF(.NOT.STRESS_FORM) THEN
-                           If_GOT_DIFFUS: IF(GOT_DIFFUS) THEN
+                        IF ( .NOT.STRESS_FORM ) THEN
+                           IF_GOT_DIFFUS: IF ( GOT_DIFFUS ) THEN
                               ! These subs caculate the effective diffusion coefficient DIFF_COEF_DIVDX,DIFF_COEFOLD_DIVDX
 
                               IF(IDIM==1) THEN
@@ -4697,8 +4694,8 @@
                                       CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                       SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(:,:,IDIM,IPHASE,SGI), &
                                       HDC, &
-                                      U_NODJ_SGI_IPHASE,    U_NODI_SGI_IPHASE, &
-                                      UOLD_NODJ_SGI_IPHASE, UOLD_NODI_SGI_IPHASE, &
+                                      U_NODJ_SGI_IPHASE(IDIM,IPHASE,SGI), U_NODI_SGI_IPHASE(IDIM,IPHASE,SGI), &
+                                      UOLD_NODJ_SGI_IPHASE(IDIM,IPHASE,SGI), UOLD_NODI_SGI_IPHASE(IDIM,IPHASE,SGI), &
                                       ELE,ELE2, SNORMXN,SNORMYN,SNORMZN,  &
                                       DUX_ELE,DUY_ELE,DUZ_ELE,DUOLDX_ELE,DUOLDY_ELE,DUOLDZ_ELE, &
                                       SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
@@ -4709,8 +4706,8 @@
                                       CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                       SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(:,:,IDIM,IPHASE,SGI), &
                                       HDC, &
-                                      V_NODJ_SGI_IPHASE,    V_NODI_SGI_IPHASE, &
-                                      VOLD_NODJ_SGI_IPHASE, VOLD_NODI_SGI_IPHASE, &
+                                      U_NODJ_SGI_IPHASE(IDIM,IPHASE,SGI), U_NODI_SGI_IPHASE(IDIM,IPHASE,SGI), &
+                                      UOLD_NODJ_SGI_IPHASE(IDIM,IPHASE,SGI), UOLD_NODI_SGI_IPHASE(IDIM,IPHASE,SGI), &
                                       ELE,ELE2, SNORMXN,SNORMYN,SNORMZN,  &
                                       DVX_ELE,DVY_ELE,DVZ_ELE,DVOLDX_ELE,DVOLDY_ELE,DVOLDZ_ELE, &
                                       SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
@@ -4721,16 +4718,16 @@
                                       CV_SNLOC, CV_NLOC, MAT_NLOC, NPHASE, TOTELE, MAT_NONODS,MAT_NDGLN, &
                                       SBCVFEN,SBCVNGI,SGI,IPHASE,NDIM,UDIFFUSION,UDIFF_SUF_STAB(:,:,IDIM,IPHASE,SGI), &
                                       HDC, &
-                                      W_NODJ_SGI_IPHASE,    W_NODI_SGI_IPHASE, &
-                                      WOLD_NODJ_SGI_IPHASE, WOLD_NODI_SGI_IPHASE, &
+                                      U_NODJ_SGI_IPHASE(IDIM,IPHASE,SGI), U_NODI_SGI_IPHASE(IDIM,IPHASE,SGI), &
+                                      UOLD_NODJ_SGI_IPHASE(IDIM,IPHASE,SGI), UOLD_NODI_SGI_IPHASE(IDIM,IPHASE,SGI), &
                                       ELE,ELE2, SNORMXN,SNORMYN,SNORMZN,  &
                                       DWX_ELE,DWY_ELE,DWZ_ELE,DWOLDX_ELE,DWOLDY_ELE,DWOLDZ_ELE, &
                                       SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
                               ENDIF
                            ELSE ! IF(GOT_DIFFUS) THEN...
-                              DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )   =0.0
-                              DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )=0.0
-                           END IF If_GOT_DIFFUS
+                              DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ) = 0.0
+                              DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ) = 0.0
+                           END IF IF_GOT_DIFFUS
                            ! endof if(.not.stress_form) then...
 
                         ENDIF
@@ -4783,7 +4780,7 @@
                      END DO
                   END DO
 
-               END DO
+               END DO ! SGI
 
                DO U_SILOC=1,U_SNLOC
                   U_ILOC   =U_SLOC2LOC(U_SILOC)
