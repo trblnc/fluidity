@@ -3446,8 +3446,8 @@ end if
             CV_SLOC2LOC( : ) = CV_SLOCLIST( IFACE, : )
 
             ! Form approximate surface normal (NORMX,NORMY,NORMZ)
-           ! CALL DGSIMPLNORM( ELE, CV_SLOC2LOC, TOTELE, CV_NLOC, CV_SNLOC, NDIM, X_NDGLN, &
-           !      X, Y, Z, X_NONODS, NORMX(1), NORMX(2), NORMX(3) )
+            ! CALL DGSIMPLNORM( ELE, CV_SLOC2LOC, TOTELE, CV_NLOC, CV_SNLOC, NDIM, X_NDGLN, &
+            !      X, Y, Z, X_NONODS, NORMX(1), NORMX(2), NORMX(3) )
             CALL DGSIMPLNORM( ELE, CV_SLOC2LOC, TOTELE, CV_NLOC, CV_SNLOC, NDIM, X_NDGLN, &
                  X, X_NONODS, NORMX )
 
@@ -3896,9 +3896,9 @@ end if
 
                      DO IDIM=1, NDIM_VEL
 ! This if should be deleted eventually and DIFFUS_CAL_COEFF_STRESS_OR_TENSOR used instead...
-                   IF(.NOT.STRESS_FORM) THEN
-                        If_GOT_DIFFUS: IF(GOT_DIFFUS) THEN
-                           ! These subs caculate the effective diffusion coefficient DIFF_COEF_DIVDX,DIFF_COEFOLD_DIVDX
+                        IF(.NOT.STRESS_FORM) THEN
+                           If_GOT_DIFFUS: IF(GOT_DIFFUS) THEN
+                              ! These subs caculate the effective diffusion coefficient DIFF_COEF_DIVDX,DIFF_COEFOLD_DIVDX
 
                               CALL DIFFUS_CAL_COEFF_SURFACE(DIFF_COEF_DIVDX( IDIM,IPHASE,SGI ), &
                                    DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI ),  &
@@ -3910,12 +3910,12 @@ end if
                                    ELE,ELE2, SNORMXN(1),SNORMXN(2),SNORMXN(3),  &
                                    DUX_ELE(:,IDIM,1),DUX_ELE(:,IDIM,2),DUX_ELE(:,IDIM,3),DUOLDX_ELE(:,IDIM,1),DUOLDX_ELE(:,IDIM,2),DUOLDX_ELE(:,IDIM,3), &
                                    SELE,STOTEL,WIC_U_BC,WIC_U_BC_DIRICHLET, MAT_OTHER_LOC,CV_SLOC2LOC )
-                        ELSE ! IF(GOT_DIFFUS) THEN...
-                           DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )   =0.0
-                           DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )=0.0
-                        END IF If_GOT_DIFFUS
+                           ELSE ! IF(GOT_DIFFUS) THEN...
+                              DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )   =0.0
+                              DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )=0.0
+                           END IF If_GOT_DIFFUS
 ! endof if(.not.stress_form) then...
-                   ENDIF
+                        ENDIF
 
                         FTHETA( IDIM,IPHASE,SGI )=1.0
 
@@ -4003,10 +4003,11 @@ end if
                                   - VLM_NEW*SLOC_U( IDIM,IPHASE,U_SJLOC ) +  VLM_NEW*SLOC2_U(IDIM,IPHASE,U_SJLOC)
                               ELSE
 
-                              CALL USE_POSINMAT_A_STORE_SUF_DG(COUNT2, U_INOD, U_JNOD2,  &
-                                 U_NONODS, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA, &
-                                 IDO_STORE_AC_SPAR_PT,STORED_AC_SPAR_PT, POSINMAT_A_STORE_SUF_DG, ELE,IFACE,U_SILOC, U_SJLOC, IPHASE, IPHASE, IDIM,  &
-                                 TOTELE,NFACE,U_SNLOC,NPHASE,NDIM_VEL) 
+                                 CALL USE_POSINMAT_A_STORE_SUF_DG(COUNT2, U_INOD, U_JNOD2,  &
+                                      U_NONODS, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA, &
+                                      IDO_STORE_AC_SPAR_PT,STORED_AC_SPAR_PT, POSINMAT_A_STORE_SUF_DG, &
+                                      ELE,IFACE,U_SILOC, U_SJLOC, IPHASE, IPHASE, IDIM,  &
+                                      TOTELE,NFACE,U_SNLOC,NPHASE,NDIM_VEL) 
 
                                  IF(MOM_CONSERV) THEN
                                     DGM_PHA( COUNT )  =  DGM_PHA( COUNT )  + NN_SNDOTQ_OUT
@@ -4051,7 +4052,8 @@ end if
                                  ENDIF
                                  LOC_U_RHS( IDIM,IPHASE,U_ILOC ) =  LOC_U_RHS( IDIM,IPHASE,U_ILOC ) - VLM * SUF_U_BC_ROB2( IDIM,IPHASE,U_SJLOC,SELE2 )
                                  RHS_DIFF_U( IDIM,IPHASE,U_ILOC )=RHS_DIFF_U( IDIM,IPHASE,U_ILOC )  &
-                                         - VLM * SUF_U_BC_ROB1( IDIM,IPHASE,U_SJLOC,SELE2 )*SLOC_U( IDIM,IPHASE,U_SJLOC )- VLM * SUF_U_BC_ROB2( IDIM,IPHASE,U_SJLOC,SELE2 )
+                                      - VLM * SUF_U_BC_ROB1( IDIM,IPHASE,U_SJLOC,SELE2 )*SLOC_U( IDIM,IPHASE,U_SJLOC ) - &
+                                      VLM * SUF_U_BC_ROB2( IDIM,IPHASE,U_SJLOC,SELE2 )
                               ENDIF
 ! BC for incoming momentum...
                               IF( WIC_MOMU_BC(IPHASE,SELE2) == WIC_U_BC_DIRICHLET ) THEN 

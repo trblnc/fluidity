@@ -1125,7 +1125,7 @@
          end do  ! End of element loop    
       end if
 
-      NO_MATRIX_STORE=(NCOLDGM_PHA.LE.1)
+      NO_MATRIX_STORE = ( NCOLDGM_PHA<=1 )
 
       IF( GLOBAL_SOLVE ) THEN 
          ! Global solve  
@@ -2298,8 +2298,8 @@
            CVFEM_ON_FACE, UFEM_ON_FACE
 
       ! Nonlinear Petrov-Galerkin stuff...
-      REAL, DIMENSION ( : , : ), allocatable ::LOC_MASS_INV, LOC_MASS, RHS_DIFF_U, &
-           RHS_DIFF_V, RHS_DIFF_W,  DIFF_VEC_U,DIFF_VEC_V,DIFF_VEC_W, &
+      REAL, DIMENSION ( : , : ), allocatable ::LOC_MASS_INV, LOC_MASS, &
+           !DIFF_VEC_U,DIFF_VEC_V,DIFF_VEC_W, &
            DIFFGI_U, DIFFGI_V, DIFFGI_W,  &
            U_DT, U_DX, U_DY, U_DZ,  V_DT, V_DX, V_DY, V_DZ, W_DT, W_DX, W_DY, W_DZ, & 
            UOLD_DX, UOLD_DY, UOLD_DZ,  VOLD_DX, VOLD_DY, VOLD_DZ, &
@@ -2320,9 +2320,9 @@
       REAL, DIMENSION ( :, :, : ), allocatable :: LOC_NU, LOC_NUOLD
       REAL, DIMENSION ( :, : ), allocatable :: LOC_UDEN,  LOC_UDENOLD
       REAL, DIMENSION ( :, :), allocatable :: LOC_PLIKE_GRAD_SOU_COEF
-      REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_SOURCE_CV
+      REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_SOURCE_CV, DIFF_VEC_U
 
-      REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_ABSORB,LOC_U_ABS_STAB
+      REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_ABSORB,LOC_U_ABS_STAB, RHS_DIFF_U, LOC_U_RHS
       REAL, DIMENSION ( :, :, :, : ), allocatable :: LOC_UDIFFUSION
       ! internal/external surfaces...
       REAL, DIMENSION ( :, : ), allocatable :: SLOC_UDEN, SLOC2_UDEN, SLOC_UDENOLD, SLOC2_UDENOLD
@@ -2362,7 +2362,7 @@
       REAL :: VLKNN
    
       INTEGER :: P_INOD, U_INOD_IPHA, U_JNOD, U_KLOC2, U_NODK2, U_NODK2_PHA, GLOBJ_IPHA, CV_INOD, CV_ILOC2, CV_INOD2
-      logical firstst,NO_MATRIX_STORE
+      logical :: firstst, NO_MATRIX_STORE
       character( len = 100 ) :: name
 
       character( len = option_path_len ) :: overlapping_path 
@@ -2679,19 +2679,18 @@
       ALLOCATE( GRAD_SOU_GI_NMY( NPHASE ))
       ALLOCATE( GRAD_SOU_GI_NMZ( NPHASE ))
 
-      ALLOCATE( MASS_ELE( TOTELE ))
-      MASS_ELE=0.0
+      ALLOCATE( MASS_ELE( TOTELE ) ) ; MASS_ELE = 0.0
 
       ! Allocating for non-linear Petrov-Galerkin diffusion stabilization...
       ALLOCATE( LOC_MASS_INV(U_NLOC, U_NLOC) )
       ALLOCATE( LOC_MASS(U_NLOC, U_NLOC) )
-      ALLOCATE( RHS_DIFF_U(U_NLOC,NPHASE) )
-      ALLOCATE( RHS_DIFF_V(U_NLOC,NPHASE) )
-      ALLOCATE( RHS_DIFF_W(U_NLOC,NPHASE) )
 
-      ALLOCATE( DIFF_VEC_U(U_NLOC,NPHASE) )
-      ALLOCATE( DIFF_VEC_V(U_NLOC,NPHASE) )
-      ALLOCATE( DIFF_VEC_W(U_NLOC,NPHASE) )
+      ALLOCATE( RHS_DIFF_U( NDIM_VEL, NPHASE, U_NLOC ) )
+      ALLOCATE( LOC_U_RHS( NDIM_VEL, NPHASE, U_NLOC ) )
+
+      ALLOCATE( DIFF_VEC_U( NDIM_VEL, NPHASE, U_NLOC ) )
+      !ALLOCATE( DIFF_VEC_V(U_NLOC,NPHASE) )
+      !ALLOCATE( DIFF_VEC_W(U_NLOC,NPHASE) )
 
       ALLOCATE( DIFFGI_U(CV_NGI,NPHASE), DIFFGI_V(CV_NGI,NPHASE), DIFFGI_W(CV_NGI,NPHASE) )
 
@@ -2779,8 +2778,8 @@
       DCYL = ( NDIM == -2 )
       D3   = ( NDIM == 3  )
 
-      NO_MATRIX_STORE=(NCOLDGM_PHA.LE.1)
-      IF(( .NOT. JUST_BL_DIAG_MAT ).and.(.NOT.NO_MATRIX_STORE)) DGM_PHA = 0.0
+      NO_MATRIX_STORE = ( NCOLDGM_PHA <= 1 )
+      IF ( ( .NOT. JUST_BL_DIAG_MAT ) .and. ( .NOT. NO_MATRIX_STORE ) ) DGM_PHA = 0.0
       C = 0.0
       U_RHS = 0.0
 
@@ -2861,7 +2860,8 @@
 
 
          ! *********subroutine Determine local vectors...
-         !         LOC_U_RHS  =0.0
+         LOC_U_RHS  =0.0
+
          DO ILEV = 1, NLEV
             DO U_ILOC = 1 +(ILEV-1)*U_NLOC2, ILEV*U_NLOC2
 
@@ -2871,21 +2871,21 @@
                      IF(IDIM==1) THEN
                         LOC_U(IDIM,IPHASE,U_ILOC)=U(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_UOLD(IDIM,IPHASE,U_ILOC)=UOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     ENDIF
+                     END IF
                      IF(IDIM==2) THEN
                         LOC_U(IDIM,IPHASE,U_ILOC)=V(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_UOLD(IDIM,IPHASE,U_ILOC)=VOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     ENDIF
+                     END IF
                      IF(IDIM==3) THEN
                         LOC_U(IDIM,IPHASE,U_ILOC)=W(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_UOLD(IDIM,IPHASE,U_ILOC)=WOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     ENDIF
+                     END IF
                   END DO
                   DO IDIM=1,NDIM
                      IF(IDIM==1) THEN
                         LOC_NU(IDIM,IPHASE,U_ILOC)=NU(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NUOLD(IDIM,IPHASE,U_ILOC)=NUOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     ENDIF
+                     END IF
                      IF(IDIM==2) THEN
                         LOC_NU(IDIM,IPHASE,U_ILOC)=NV(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NUOLD(IDIM,IPHASE,U_ILOC)=NVOLD(U_INOD+(IPHASE-1)*U_NONODS)
@@ -2893,7 +2893,7 @@
                      IF(IDIM==3) THEN
                         LOC_NU(IDIM,IPHASE,U_ILOC)=NW(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NUOLD(IDIM,IPHASE,U_ILOC)=NWOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     ENDIF
+                     END IF
                   END DO
                END DO
 
@@ -3100,9 +3100,7 @@
          ! **********REVIEWER 1-END**********************
 
          ! **********REVIEWER 1-START**********************
-         RHS_DIFF_U=0.0
-         RHS_DIFF_V=0.0
-         RHS_DIFF_W=0.0
+         RHS_DIFF_U = 0.0
 
          Loop_ilev_DGNods1: DO ILEV=1,NLEV
             Loop_DGNods1: DO U_ILOC = 1 +(ILEV-1)*U_NLOC2, ILEV*U_NLOC2
@@ -3316,8 +3314,8 @@
                               I = U_ILOC + (IPHA_IDIM-1)*U_NLOC
                               J = U_JLOC + (JPHA_JDIM-1)*U_NLOC
 
-                              IF(.NOT.NO_MATRIX_STORE) THEN
-                                 IF(.NOT.JUST_BL_DIAG_MAT) THEN
+                              IF ( .NOT.NO_MATRIX_STORE ) THEN
+                                 IF ( .NOT.JUST_BL_DIAG_MAT ) THEN
 
                                     CALL POSINMAT( COUNT, U_INOD_IDIM_IPHA, U_JNOD_JDIM_JPHA, &
                                          U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
@@ -3436,7 +3434,7 @@
                                  I = U_ILOC + (IDIM-1) * U_NLOC + (IPHASE-1) * NDIM_VEL * U_NLOC
                                  J = U_JLOC + (JDIM-1) * U_NLOC + (IPHASE-1) * NDIM_VEL * U_NLOC
 
-                                 IF(NO_MATRIX_STORE) THEN
+                                 IF ( NO_MATRIX_STORE ) THEN
                                     IF(JDIM==1) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
                                          - STRESS_IJ( IPHASE,IDIM,JDIM )*U(GLOBJ_IPHA)
                                     IF(JDIM==2) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
@@ -3450,27 +3448,18 @@
                                     DGM_PHA( COUNT ) = DGM_PHA( COUNT ) + STRESS_IJ( IPHASE,IDIM,JDIM )
                                  ENDIF
 
-                                 !                           PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) + STRESS_IJ( IPHASE,IDIM,JDIM )
-                                 !                           PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) + MAX(0.0, STRESS_IJ( IPHASE,IDIM,JDIM ))
+                                 !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) + STRESS_IJ( IPHASE,IDIM,JDIM )
+                                 !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) + MAX ( 0.0, STRESS_IJ( IPHASE,IDIM,JDIM ) )
 
                               END DO
-                           END DO
-                           IDIM=1 
-                           RHS_DIFF_U(U_ILOC,IPHASE) = RHS_DIFF_U(U_ILOC,IPHASE) + &
-                                STRESS_IJ( IPHASE,IDIM,1 )*U(GLOBJ_IPHA) +STRESS_IJ( IPHASE,IDIM,2 )*V(GLOBJ_IPHA)+STRESS_IJ( IPHASE,IDIM,3 )*W(GLOBJ_IPHA)
-                           IF(NDIM_VEL.GE.2) THEN
-                              IDIM=2
-                              RHS_DIFF_V(U_ILOC,IPHASE) = RHS_DIFF_V(U_ILOC,IPHASE) + &
-                                   STRESS_IJ( IPHASE,IDIM,1 )*U(GLOBJ_IPHA) +STRESS_IJ( IPHASE,IDIM,2 )*V(GLOBJ_IPHA)+STRESS_IJ( IPHASE,IDIM,3 )*W(GLOBJ_IPHA)
-                           ENDIF
-                           IF(NDIM_VEL.GE.3) THEN
-                              IDIM=3
-                              RHS_DIFF_W(U_ILOC,IPHASE) = RHS_DIFF_W(U_ILOC,IPHASE) + &
-                                   STRESS_IJ( IPHASE,IDIM,1 )*U(GLOBJ_IPHA) +STRESS_IJ( IPHASE,IDIM,2 )*V(GLOBJ_IPHA)+STRESS_IJ( IPHASE,IDIM,3 )*W(GLOBJ_IPHA)
-                           ENDIF
+  
+                              RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) + STRESS_IJ( IPHASE,IDIM,1 ) * U( GLOBJ_IPHA ) + & 
+                                   STRESS_IJ( IPHASE,IDIM,2 ) * V( GLOBJ_IPHA ) + STRESS_IJ( IPHASE,IDIM,3 ) * W( GLOBJ_IPHA )
 
+                           END DO
                         END DO
-                     ENDIF
+                     END IF
+
                      DO IDIM = 1, NDIM_VEL 
                         DO IPHASE = 1, NPHASE
                            GLOBJ_IPHA = GLOBJ + (IPHASE-1)*U_NONODS
@@ -3481,7 +3470,7 @@
                            I = U_ILOC + (IDIM-1) * U_NLOC + (IPHASE-1) * NDIM_VEL * U_NLOC
                            J = U_JLOC + (IDIM-1) * U_NLOC + (IPHASE-1) * NDIM_VEL * U_NLOC
 
-                           IF(NO_MATRIX_STORE) THEN
+                           IF ( NO_MATRIX_STORE ) THEN
                               IF(IDIM==1) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
                                    - VLN( IPHASE )*U(GLOBJ_IPHA)
                               IF(IDIM==2) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
@@ -3496,7 +3485,7 @@
                            ENDIF
 
                            IF(.NOT.STRESS_FORM) THEN
-                              IF(NO_MATRIX_STORE) THEN
+                              IF ( NO_MATRIX_STORE ) THEN
                                  IF(IDIM==1) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
                                       - VLK( IPHASE )*U(GLOBJ_IPHA)
                                  IF(IDIM==2) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
@@ -3507,20 +3496,20 @@
                                  DGM_PHA( COUNT ) = DGM_PHA( COUNT ) + VLK( IPHASE ) 
                               ENDIF
 
-                              !                              PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) + VLK( IPHASE )
-                              !                              PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) + MAX(0.0, VLK( IPHASE ))
+                              !PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) + VLK( IPHASE )
+                              !PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) + MAX(0.0, VLK( IPHASE ))
 
-                              IF(IDIM==1) RHS_DIFF_U(U_ILOC,IPHASE) = RHS_DIFF_U(U_ILOC,IPHASE) + &
-                                   VLK( IPHASE )*U(GLOBJ_IPHA) 
-                              IF(IDIM==2) RHS_DIFF_V(U_ILOC,IPHASE) = RHS_DIFF_V(U_ILOC,IPHASE) + &
-                                   VLK( IPHASE )*V(GLOBJ_IPHA) 
-                              IF(IDIM==3) RHS_DIFF_W(U_ILOC,IPHASE) = RHS_DIFF_W(U_ILOC,IPHASE) + &
-                                   VLK( IPHASE )*W(GLOBJ_IPHA) 
-                           ENDIF
+                              IF( IDIM==1 ) RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) + &
+                                   VLK( IPHASE )*U( GLOBJ_IPHA ) 
+                              IF( IDIM==2 ) RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) + &
+                                   VLK( IPHASE )*V( GLOBJ_IPHA ) 
+                              IF( IDIM==3 ) RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) + &
+                                   VLK( IPHASE )*W( GLOBJ_IPHA ) 
+                           END IF
 
                         END DO
                      END DO
-                  ENDIF
+                  END IF
 
                END DO Loop_DGNods2
 
@@ -3649,26 +3638,26 @@
             !      CALL INVERT(LOC_MASS_INV)
             CALL MATDMATINV( LOC_MASS, LOC_MASS_INV, U_NLOC )
 
-            DO U_ILOC=1,U_NLOC
-               DO IPHASE=1,NPHASE
-                  ! sum cols of matrix * rows of vector...
-                  DIFF_VEC_U(U_ILOC,IPHASE)= SUM( LOC_MASS_INV(U_ILOC,:)*RHS_DIFF_U(:,IPHASE) )
-                  DIFF_VEC_V(U_ILOC,IPHASE)= SUM( LOC_MASS_INV(U_ILOC,:)*RHS_DIFF_V(:,IPHASE) )
-                  DIFF_VEC_W(U_ILOC,IPHASE)= SUM( LOC_MASS_INV(U_ILOC,:)*RHS_DIFF_W(:,IPHASE) )
+            DO U_ILOC = 1, U_NLOC
+               DO IPHASE = 1, NPHASE
+                  DO IDIM = 1, NDIM_VEL
+                     ! sum cols of matrix * rows of vector...
+                     DIFF_VEC_U( IDIM,IPHASE,U_ILOC ) = SUM( LOC_MASS_INV( U_ILOC,: ) * RHS_DIFF_U( IDIM,IPHASE,: ) )
+                  END DO
                END DO
             END DO
 
-            DIFFGI_U=0.0; DIFFGI_V=0.0; DIFFGI_W=0.0
+            DIFFGI_U=0.0 ; DIFFGI_V=0.0 ; DIFFGI_W=0.0
 
-            U_DT=0.0; U_DX=0.0; U_DY=0.0; U_DZ=0.0
-            V_DT=0.0; V_DX=0.0; V_DY=0.0; V_DZ=0.0
-            W_DT=0.0; W_DX=0.0; W_DY=0.0; W_DZ=0.0
+            U_DT=0.0 ; U_DX=0.0 ; U_DY=0.0 ; U_DZ=0.0
+            V_DT=0.0 ; V_DX=0.0 ; V_DY=0.0 ; V_DZ=0.0
+            W_DT=0.0 ; W_DX=0.0 ; W_DY=0.0 ; W_DZ=0.0
 
-            UOLD_DX=0.0; UOLD_DY=0.0; UOLD_DZ=0.0
-            VOLD_DX=0.0; VOLD_DY=0.0; VOLD_DZ=0.0
-            WOLD_DX=0.0; WOLD_DY=0.0; WOLD_DZ=0.0
+            UOLD_DX=0.0 ; UOLD_DY=0.0 ; UOLD_DZ=0.0
+            VOLD_DX=0.0 ; VOLD_DY=0.0 ; VOLD_DZ=0.0
+            WOLD_DX=0.0 ; WOLD_DY=0.0 ; WOLD_DZ=0.0
 
-            SOUGI_X=0.0; SOUGI_Y=0.0; SOUGI_Z=0.0
+            SOUGI_X=0.0 ; SOUGI_Y=0.0 ; SOUGI_Z=0.0
 
             DO U_ILOC = 1, U_NLOC
                U_INOD = U_NDGLN(( ELE - 1 ) * U_NLOC + U_ILOC )
@@ -3676,9 +3665,11 @@
                   DO IPHASE = 1, NPHASE
                      U_INOD_IPHA=U_INOD + (IPHASE-1)*U_NONODS
 
-                     DIFFGI_U( GI, IPHASE ) = DIFFGI_U( GI, IPHASE ) + UFEN( U_ILOC, GI )*DIFF_VEC_U(U_ILOC,IPHASE)
-                     IF(NDIM_VEL.GE.2) DIFFGI_V( GI, IPHASE ) = DIFFGI_V( GI, IPHASE ) + UFEN( U_ILOC, GI )*DIFF_VEC_V(U_ILOC,IPHASE)
-                     IF(NDIM_VEL.GE.3) DIFFGI_W( GI, IPHASE ) = DIFFGI_W( GI, IPHASE ) + UFEN( U_ILOC, GI )*DIFF_VEC_W(U_ILOC,IPHASE)
+                     DO IDIM = 1, NDIM_VEL
+                        DIFFGI_U( GI, IPHASE ) = DIFFGI_U( GI, IPHASE ) + UFEN( U_ILOC, GI ) * DIFF_VEC_U( IDIM,IPHASE,U_ILOC )
+                        IF ( IDIM.GE.2 ) DIFFGI_V( GI, IPHASE ) = DIFFGI_V( GI, IPHASE ) + UFEN( U_ILOC, GI ) * DIFF_VEC_U( IDIM,IPHASE,U_ILOC )
+                        IF ( IDIM.GE.3 ) DIFFGI_W( GI, IPHASE ) = DIFFGI_W( GI, IPHASE ) + UFEN( U_ILOC, GI ) * DIFF_VEC_U( IDIM,IPHASE,U_ILOC )
+                     END DO
 
                      U_DX( GI, IPHASE ) = U_DX( GI, IPHASE ) + UFENX( U_ILOC, GI )*U(U_INOD_IPHA)
                      IF(NDIM.GE.2) U_DY( GI, IPHASE ) = U_DY( GI, IPHASE ) + UFENY( U_ILOC, GI )*U(U_INOD_IPHA)
@@ -3929,7 +3920,7 @@
                         U_JNOD_IDIM_IPHA = U_JNOD + (IDIM-1)*U_NONODS + ( IPHASE - 1 ) * NDIM_VEL*U_NONODS 
 
                         IF(.NOT.JUST_BL_DIAG_MAT) THEN
-                           IF(NO_MATRIX_STORE) THEN
+                           IF ( NO_MATRIX_STORE ) THEN
                               IF(IDIM==1) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
                                    - VLK_UVW(IDIM)*U(GLOBJ_IPHA)
                               IF(IDIM==2) U_RHS( U_INOD_IDIM_IPHA ) = U_RHS( U_INOD_IDIM_IPHA ) &
@@ -4004,6 +3995,25 @@
 
       !! *************************loop over surfaces*********************************************
       ! at some pt we need to merge these 2 loops but there is a bug when doing that!!!!!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      LOC_U_RHS = 0.0
+
+
+
+
 
       ! **********REVIEWER 3-START**********************
       DISC_PRES = ( CV_NONODS == TOTELE * CV_NLOC )
@@ -4732,16 +4742,16 @@
 
                         ENDIF
 
-                        FTHETA( IDIM,IPHASE,SGI )=1.0
+                        FTHETA( IDIM,IPHASE,SGI ) = 1.0
 
-                        IF( NON_LIN_DGFLUX ) THEN
+                        IF ( NON_LIN_DGFLUX ) THEN
                            ! non-linear DG flux - if we have an oscillation use upwinding else use central scheme. 
                            have_oscillation = dg_oscilat_detect( SNDOTQ_KEEP(SGI,IPHASE), SNDOTQ2_KEEP(SGI,IPHASE), &
                                 N_DOT_DU(sgi,iphase), N_DOT_DU2(sgi,iphase), SINCOME(SGI,IPHASE) )
                            have_oscillation_old = dg_oscilat_detect( SNDOTQOLD_KEEP(SGI,IPHASE), SNDOTQOLD2_KEEP(SGI,IPHASE), &
                                 N_DOT_DUOLD(sgi,iphase), N_DOT_DUOLD2(sgi,iphase), SINCOMEOLD(SGI,IPHASE) )
                         ELSE
-                           IF( UPWIND_DGFLUX ) THEN
+                           IF ( UPWIND_DGFLUX ) THEN
                               ! Upwind DG flux...
                               have_oscillation = .TRUE.
                               have_oscillation_old = .TRUE.
@@ -4749,8 +4759,8 @@
                               ! Central diff DG flux...
                               have_oscillation = .FALSE.
                               have_oscillation_old = .FALSE.
-                           ENDIF
-                        ENDIF
+                           END IF
+                        END IF
 
                         if ( .not. have_oscillation ) then ! central differencing scheme....
                            SNDOTQ_IN(IDIM,IPHASE,SGI) = SNDOTQ_IN(IDIM,IPHASE,SGI)  &
@@ -4782,71 +4792,65 @@
 
                END DO ! SGI
 
-               DO U_SILOC=1,U_SNLOC
-                  U_ILOC   =U_SLOC2LOC(U_SILOC)
-                  IU_NOD=U_NDGLN((ELE-1)*U_NLOC+U_ILOC)
-                  DO U_SJLOC=1,U_SNLOC
-                     U_JLOC =U_SLOC2LOC(U_SJLOC)
-                     JU_NOD=U_NDGLN((ELE-1)*U_NLOC+U_JLOC)
-                     IF(SELE2 /= 0) THEN
-                        U_JLOC2=U_JLOC
-                        JU_NOD2=JU_NOD
-                        SUF_U_SJ2 = U_SJLOC + U_SNLOC * ( SELE2 - 1 )
+               DO U_SILOC = 1, U_SNLOC
+                  U_ILOC = U_SLOC2LOC(U_SILOC)
+                  IU_NOD = U_NDGLN( (ELE-1)*U_NLOC+U_ILOC )
+                  DO U_SJLOC = 1, U_SNLOC
+                     U_JLOC = U_SLOC2LOC( U_SJLOC )
+                     JU_NOD = U_NDGLN( (ELE-1)*U_NLOC+U_JLOC )
+                     IF ( SELE2 /= 0 ) THEN
+                        U_JLOC2 = U_JLOC
+                        JU_NOD2 = JU_NOD
+                        SUF_U_SJ2 = U_SJLOC + U_SNLOC*(SELE2-1)
                      ELSE
-                        U_JLOC2=U_ILOC_OTHER_SIDE(U_SJLOC)
-                        JU_NOD2=U_NDGLN((ELE2-1)*U_NLOC+U_JLOC2)
-                     ENDIF
+                        U_JLOC2 = U_ILOC_OTHER_SIDE( U_SJLOC )
+                        JU_NOD2 = U_NDGLN( (ELE2-1)*U_NLOC+U_JLOC2 )
+                     END IF
 
                      ! add diffusion term...
-                     DO IPHASE=1,NPHASE
-                        DO IDIM=1,NDIM_VEL
+                     DO IPHASE = 1, NPHASE
+                        DO IDIM = 1, NDIM_VEL
 
-                           VLM=0.0
-                           VLM_NEW=0.0
-                           VLM_OLD=0.0
-                           NN_SNDOTQ_IN    = 0.0
-                           NN_SNDOTQ_OUT   = 0.0
+                           VLM = 0.0 ; VLM_NEW = 0.0 ; VLM_OLD = 0.0
+                           NN_SNDOTQ_IN = 0.0
+                           NN_SNDOTQ_OUT = 0.0
                            NN_SNDOTQOLD_IN = 0.0 
-                           NN_SNDOTQOLD_OUT= 0.0
+                           NN_SNDOTQOLD_OUT = 0.0
                            ! Have a surface integral on element boundary...  
-                           DO SGI=1,SBCVNGI
-
-                              RNN=SDETWE(SGI)*SBUFEN(U_SILOC,SGI)*SBUFEN(U_SJLOC,SGI)
-
-                              VLM=VLM+RNN
+                           DO SGI = 1, SBCVNGI
+                              RNN = SDETWE( SGI ) * SBUFEN( U_SILOC,SGI ) * SBUFEN( U_SJLOC,SGI )
+                              VLM = VLM + RNN
 
                               VLM_NEW = VLM_NEW + FTHETA( IDIM,IPHASE,SGI ) * RNN &
                                    * DIFF_COEF_DIVDX( IDIM,IPHASE,SGI )
-                              VLM_OLD = VLM_OLD + (1.-FTHETA( IDIM,IPHASE,SGI )) * RNN &
+                              VLM_OLD = VLM_OLD + ( 1.-FTHETA( IDIM,IPHASE,SGI ) ) * RNN &
                                    * DIFF_COEFOLD_DIVDX( IDIM,IPHASE,SGI )
 
-                              NN_SNDOTQ_IN    = NN_SNDOTQ_IN     + SNDOTQ_IN(IDIM,IPHASE,SGI)    *RNN 
-                              NN_SNDOTQ_OUT   = NN_SNDOTQ_OUT    + SNDOTQ_OUT(IDIM,IPHASE,SGI)   *RNN 
-                              NN_SNDOTQOLD_IN = NN_SNDOTQOLD_IN  + SNDOTQOLD_IN(IDIM,IPHASE,SGI) *RNN 
-                              NN_SNDOTQOLD_OUT= NN_SNDOTQOLD_OUT + SNDOTQOLD_OUT(IDIM,IPHASE,SGI)*RNN 
-
+                              NN_SNDOTQ_IN = NN_SNDOTQ_IN + SNDOTQ_IN(IDIM,IPHASE,SGI) * RNN 
+                              NN_SNDOTQ_OUT = NN_SNDOTQ_OUT + SNDOTQ_OUT(IDIM,IPHASE,SGI) * RNN 
+                              NN_SNDOTQOLD_IN = NN_SNDOTQOLD_IN + SNDOTQOLD_IN(IDIM,IPHASE,SGI) * RNN 
+                              NN_SNDOTQOLD_OUT = NN_SNDOTQOLD_OUT + SNDOTQOLD_OUT(IDIM,IPHASE,SGI) * RNN 
                            END DO
 
-                           IU_NOD_PHA  =  IU_NOD  + (IPHASE-1)*U_NONODS
-                           JU_NOD_PHA  =  JU_NOD  + (IPHASE-1)*U_NONODS
-                           JU_NOD2_PHA =  JU_NOD2 + (IPHASE-1)*U_NONODS
+                           IU_NOD_PHA = IU_NOD + (IPHASE-1)*U_NONODS
+                           JU_NOD_PHA = JU_NOD + (IPHASE-1)*U_NONODS
+                           JU_NOD2_PHA = JU_NOD2 + (IPHASE-1)*U_NONODS
 
-                           IU_NOD_DIM_PHA  =  IU_NOD  +(IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
-                           JU_NOD_DIM_PHA  =  JU_NOD  +(IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
-                           JU_NOD2_DIM_PHA =  JU_NOD2 +(IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+                           IU_NOD_DIM_PHA = IU_NOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+                           JU_NOD_DIM_PHA = JU_NOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+                           JU_NOD2_DIM_PHA = JU_NOD2 + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
 
-                           I=(IPHASE-1)*NDIM*U_NLOC + (IDIM-1)*U_NLOC + U_ILOC
-                           J=(IPHASE-1)*NDIM*U_NLOC + (IDIM-1)*U_NLOC + U_JLOC
+                           I = (IPHASE-1)*NDIM*U_NLOC + (IDIM-1)*U_NLOC + U_ILOC
+                           J = (IPHASE-1)*NDIM*U_NLOC + (IDIM-1)*U_NLOC + U_JLOC
 
-                           IF(.NOT.NO_MATRIX_STORE) THEN
-                              CALL POSINMAT( COUNT, IU_NOD_DIM_PHA, JU_NOD_DIM_PHA, &
-                                   U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
-                           ENDIF
+                           IF ( .NOT.NO_MATRIX_STORE ) CALL POSINMAT( COUNT, IU_NOD_DIM_PHA, JU_NOD_DIM_PHA, &
+                                U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
 
-                           IF(SELE2 == 0) THEN
+                           IF ( SELE2 == 0 ) THEN
 
-                              IF(NO_MATRIX_STORE) THEN
-                                 IF(MOM_CONSERV) THEN
+                              IF ( NO_MATRIX_STORE ) THEN
+
+                                 IF ( MOM_CONSERV ) THEN
                                     IF(IDIM==1) U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                          - NN_SNDOTQ_OUT*U(JU_NOD_PHA)  -  NN_SNDOTQ_IN*U(JU_NOD2_PHA)
                                     IF(IDIM==2) U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
@@ -4868,7 +4872,9 @@
                                       - VLM_NEW*V(JU_NOD_PHA)  +  VLM_NEW*V(JU_NOD2_PHA)
                                  IF(IDIM==3) U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                       - VLM_NEW*W(JU_NOD_PHA)  +  VLM_NEW*W(JU_NOD2_PHA)
-                              ELSE
+
+                              ELSE ! NO_MATRIX_STORE
+
                                  CALL POSINMAT( COUNT2, IU_NOD_DIM_PHA, JU_NOD2_DIM_PHA, &
                                       U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
 
@@ -4878,37 +4884,37 @@
                                  ELSE
                                     DGM_PHA( COUNT )  =  DGM_PHA( COUNT )  - NN_SNDOTQ_IN
                                     DGM_PHA( COUNT2 ) =  DGM_PHA( COUNT2 ) + NN_SNDOTQ_IN
-                                 ENDIF
+                                 END IF
                                  ! viscosity...
                                  DGM_PHA( COUNT )  =  DGM_PHA( COUNT )  + VLM_NEW 
                                  DGM_PHA( COUNT2 ) =  DGM_PHA( COUNT2 ) - VLM_NEW 
-                              ENDIF
+                             
+                              END IF ! NO_MATRIX_STORE
 
-                              !                                 PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) +  VLM_NEW 
-                              !                                 PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) +  MAX(0.0, VLM_NEW )
-
+                              !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) +  VLM_NEW 
+                              !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) +  MAX( 0.0, VLM_NEW )
 
                               IF(IDIM == 1) THEN
-                                 RHS_DIFF_U(U_ILOC,IPHASE)=RHS_DIFF_U(U_ILOC,IPHASE)  &
-                                      - VLM_OLD* UOLD( JU_NOD_PHA ) + VLM_OLD* UOLD( JU_NOD2_PHA ) &
-                                      - VLM_NEW* U( JU_NOD_PHA )    + VLM_NEW* U( JU_NOD2_PHA )
+                                 RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
+                                      - VLM_OLD * UOLD( JU_NOD_PHA ) + VLM_OLD * UOLD( JU_NOD2_PHA ) &
+                                      - VLM_NEW * U( JU_NOD_PHA ) + VLM_NEW * U( JU_NOD2_PHA )
                               ENDIF
                               IF(IDIM == 2) THEN
-                                 RHS_DIFF_V(U_ILOC,IPHASE)=RHS_DIFF_V(U_ILOC,IPHASE)  &
-                                      - VLM_OLD* VOLD( JU_NOD_PHA ) + VLM_OLD* VOLD( JU_NOD2_PHA ) &
-                                      - VLM_NEW* V( JU_NOD_PHA )    + VLM_NEW* V( JU_NOD2_PHA )
+                                 RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
+                                      - VLM_OLD * VOLD( JU_NOD_PHA ) + VLM_OLD * VOLD( JU_NOD2_PHA ) &
+                                      - VLM_NEW * V( JU_NOD_PHA ) + VLM_NEW * V( JU_NOD2_PHA )
                               ENDIF
                               IF(IDIM == 3) THEN
-                                 RHS_DIFF_W(U_ILOC,IPHASE)=RHS_DIFF_W(U_ILOC,IPHASE)  &
-                                      - VLM_OLD* WOLD( JU_NOD_PHA ) + VLM_OLD* WOLD( JU_NOD2_PHA ) &
-                                      - VLM_NEW* W( JU_NOD_PHA )    + VLM_NEW* W( JU_NOD2_PHA )
+                                 RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
+                                      - VLM_OLD * WOLD( JU_NOD_PHA ) + VLM_OLD * WOLD( JU_NOD2_PHA ) &
+                                      - VLM_NEW * W( JU_NOD_PHA ) + VLM_NEW * W( JU_NOD2_PHA )
                               ENDIF
 
                               IF(MOM_CONSERV) THEN
                                  IF(IDIM == 1) THEN
-                                    U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) -(+NN_SNDOTQOLD_OUT)  & 
+                                    U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) -(+NN_SNDOTQOLD_OUT)  & 
                                          * UOLD( JU_NOD_PHA )
-                                    U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) -(+NN_SNDOTQOLD_IN) &
+                                    U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) -(+NN_SNDOTQOLD_IN) &
                                          * UOLD( JU_NOD2_PHA )
                                  ENDIF
                                  IF(IDIM == 2) THEN
@@ -4961,63 +4967,63 @@
 
                               SUF_U_SJ2_IPHA = SUF_U_SJ2 + STOTEL * U_SNLOC * ( IPHASE - 1 )
 
-                              IF( (WIC_U_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_ROBIN) .OR. &
-                                   (WIC_U_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_DIRI_ADV_AND_ROBIN )) THEN
+                              IF ( ( WIC_U_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_ROBIN ) .OR. &
+                                   ( WIC_U_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_DIRI_ADV_AND_ROBIN ) ) THEN
 
-                                 IF(IDIM == 1) THEN
-                                    !                                    PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) +  VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA )
-                                    !                                    PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) +  MAX(0.0, VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA ) )
-                                    IF(NO_MATRIX_STORE) THEN
+                                 IF ( IDIM == 1 ) THEN
+                                    !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) + VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA )
+                                    !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) + MAX( 0.0, VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA ) )
+                                    IF ( NO_MATRIX_STORE ) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                             - VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA )*U(JU_NOD_PHA)  
                                     ELSE
                                        DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) + VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA )
-                                    ENDIF
+                                    END IF
                                     U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) - VLM * SUF_U_BC_ROB2( SUF_U_SJ2_IPHA )
-                                    RHS_DIFF_U(U_ILOC,IPHASE)=RHS_DIFF_U(U_ILOC,IPHASE)  &
-                                         - VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA )*U(JU_NOD_PHA) - VLM * SUF_U_BC_ROB2( SUF_U_SJ2_IPHA )
-                                 ENDIF
-                                 IF(IDIM == 2) THEN
-                                    !                                    PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) +VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA )
-                                    !                                    PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) +MAX(0.0, VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA ) )
-                                    IF(NO_MATRIX_STORE) THEN
+                                    RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
+                                         - VLM * SUF_U_BC_ROB1( SUF_U_SJ2_IPHA ) * U( JU_NOD_PHA ) - VLM * SUF_U_BC_ROB2( SUF_U_SJ2_IPHA )
+                                 END IF
+                                 IF ( IDIM == 2 ) THEN
+                                    !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) + VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA )
+                                    !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) + MAX( 0.0, VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA ) )
+                                    IF ( NO_MATRIX_STORE ) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
-                                            - VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA )*V(JU_NOD_PHA)  
+                                            - VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA ) * V( JU_NOD_PHA )
                                     ELSE
-                                       DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) + VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA )
-                                    ENDIF
-                                    U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) - VLM * SUF_V_BC_ROB2( SUF_U_SJ2_IPHA )
-                                    RHS_DIFF_V(U_ILOC,IPHASE)=RHS_DIFF_V(U_ILOC,IPHASE)  & 
-                                         - VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA )*V(JU_NOD_PHA)- VLM * SUF_V_BC_ROB2( SUF_U_SJ2_IPHA )
-                                 ENDIF
-                                 IF(IDIM == 3) THEN
-                                    !                                    PIVIT_MAT(ELE, I, J) = PIVIT_MAT(ELE, I, J) +VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA )
-                                    !                                    PIVIT_MAT(ELE, I, I) = PIVIT_MAT(ELE, I, I) +MAX(0.0, VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA ) )
-                                    IF(NO_MATRIX_STORE) THEN
+                                       DGM_PHA( COUNT ) = DGM_PHA( COUNT ) + VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA )
+                                    END IF
+                                    U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) - VLM * SUF_V_BC_ROB2( SUF_U_SJ2_IPHA )
+                                    RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
+                                         - VLM * SUF_V_BC_ROB1( SUF_U_SJ2_IPHA ) * V( JU_NOD_PHA ) - VLM * SUF_V_BC_ROB2( SUF_U_SJ2_IPHA )
+                                 END IF
+                                 IF ( IDIM == 3 ) THEN
+                                    !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) + VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA )
+                                    !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) + MAX( 0.0, VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA ) )
+                                    IF ( NO_MATRIX_STORE ) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
-                                            - VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA )*W(JU_NOD_PHA)  
+                                            - VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA ) * W(JU_NOD_PHA)  
                                     ELSE
-                                       DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) + VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA )
-                                    ENDIF
-                                    U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) - VLM * SUF_W_BC_ROB2( SUF_U_SJ2_IPHA )
-                                    RHS_DIFF_W(U_ILOC,IPHASE)=RHS_DIFF_W(U_ILOC,IPHASE)  & 
-                                         - VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA )*W(JU_NOD_PHA) - VLM * SUF_W_BC_ROB2( SUF_U_SJ2_IPHA )
-                                 ENDIF
+                                       DGM_PHA( COUNT ) = DGM_PHA( COUNT ) + VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA )
+                                    END IF
+                                    U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) - VLM * SUF_W_BC_ROB2( SUF_U_SJ2_IPHA )
+                                    RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
+                                         - VLM * SUF_W_BC_ROB1( SUF_U_SJ2_IPHA ) * W( JU_NOD_PHA ) - VLM * SUF_W_BC_ROB2( SUF_U_SJ2_IPHA )
+                                 END IF
 
-                              ENDIF
+                              END IF
                               ! BC for incoming momentum...
-                              IF( WIC_MOMU_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_DIRICHLET ) THEN 
+                              IF ( WIC_MOMU_BC(SELE2+(IPHASE-1)*STOTEL) == WIC_U_BC_DIRICHLET ) THEN 
 
-                                 IF(MOM_CONSERV) THEN
+                                 IF ( MOM_CONSERV ) THEN
 
-                                    IF(.NOT.NO_MATRIX_STORE) THEN
+                                    IF ( .NOT.NO_MATRIX_STORE ) THEN
                                        DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) + NN_SNDOTQ_OUT
                                     ENDIF
                                     IF(IDIM == 1) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMU_BC( SUF_U_SJ2_IPHA ) &
                                             - NN_SNDOTQOLD_OUT * UOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                - NN_SNDOTQ_OUT * U(JU_NOD_PHA) 
                                        ENDIF
@@ -5026,7 +5032,7 @@
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMV_BC( SUF_U_SJ2_IPHA ) &
                                             - NN_SNDOTQOLD_OUT * VOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                - NN_SNDOTQ_OUT * V(JU_NOD_PHA) 
                                        ENDIF
@@ -5035,7 +5041,7 @@
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMW_BC( SUF_U_SJ2_IPHA ) &
                                             - NN_SNDOTQOLD_OUT * WOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                - NN_SNDOTQ_OUT * W(JU_NOD_PHA) 
                                        ENDIF
@@ -5044,14 +5050,14 @@
                                     ! ENDOF IF(MOM_CONSERV) THEN...
                                  ELSE
 
-                                    IF(.NOT.NO_MATRIX_STORE) THEN
+                                    IF( .NOT.NO_MATRIX_STORE ) THEN
                                        DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) - NN_SNDOTQ_IN
                                     ENDIF
                                     IF(IDIM == 1) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMU_BC( SUF_U_SJ2_IPHA ) &
                                             + NN_SNDOTQOLD_IN * UOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                + NN_SNDOTQ_IN * U(JU_NOD_PHA) 
                                        ENDIF
@@ -5060,7 +5066,7 @@
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMV_BC( SUF_U_SJ2_IPHA ) &
                                             + NN_SNDOTQOLD_IN * VOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                + NN_SNDOTQ_IN * V(JU_NOD_PHA) 
                                        ENDIF
@@ -5069,7 +5075,7 @@
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN )*SUF_MOMW_BC( SUF_U_SJ2_IPHA ) &
                                             + NN_SNDOTQOLD_IN * WOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                + NN_SNDOTQ_IN * W(JU_NOD_PHA) 
                                        ENDIF
@@ -5103,14 +5109,14 @@
                                     ! ENDOF IF(MOM_CONSERV) THEN...
                                  ELSE
 
-                                    IF(.NOT.NO_MATRIX_STORE) THEN
+                                    IF( .NOT.NO_MATRIX_STORE ) THEN
                                        DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) - (NN_SNDOTQ_IN + NN_SNDOTQ_OUT)
                                     ENDIF
                                     IF(IDIM == 1) THEN
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN + NN_SNDOTQ_OUT + NN_SNDOTQOLD_OUT)*SUF_MOMU_BC( SUF_U_SJ2_IPHA ) &
                                             + (NN_SNDOTQOLD_IN + NN_SNDOTQOLD_OUT) * UOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                + (NN_SNDOTQ_IN + NN_SNDOTQ_OUT) * U(JU_NOD_PHA) 
                                        ENDIF
@@ -5119,7 +5125,7 @@
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN + NN_SNDOTQ_OUT + NN_SNDOTQOLD_OUT)*SUF_MOMV_BC( SUF_U_SJ2_IPHA ) &
                                             + (NN_SNDOTQOLD_IN + NN_SNDOTQOLD_OUT) * VOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                + (NN_SNDOTQ_IN + NN_SNDOTQ_OUT) * V(JU_NOD_PHA) 
                                        ENDIF
@@ -5128,7 +5134,7 @@
                                        U_RHS( IU_NOD_DIM_PHA ) =  U_RHS( IU_NOD_DIM_PHA ) &
                                             - ( NN_SNDOTQ_IN + NN_SNDOTQOLD_IN + NN_SNDOTQ_OUT + NN_SNDOTQOLD_OUT)*SUF_MOMW_BC( SUF_U_SJ2_IPHA ) &
                                             + (NN_SNDOTQOLD_IN + NN_SNDOTQOLD_OUT) * WOLD(JU_NOD_PHA)
-                                       IF(NO_MATRIX_STORE) THEN
+                                       IF( NO_MATRIX_STORE ) THEN
                                           U_RHS( IU_NOD_DIM_PHA ) = U_RHS( IU_NOD_DIM_PHA ) &
                                                + (NN_SNDOTQ_IN + NN_SNDOTQ_OUT) * W(JU_NOD_PHA) 
                                        ENDIF
@@ -5147,14 +5153,28 @@
                END DO
             ENDIF If_diffusion_or_momentum3
 
+
+
+
+            ! copy local memory
+            DO U_ILOC = 1, U_NLOC
+               U_INOD = U_NDGLN( (ELE-1)*U_NLOC+U_ILOC ) 
+               DO IPHASE = 1, NPHASE
+                  DO IDIM = 1, NDIM
+                     GLOBI = U_INOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+                     U_RHS( GLOBI ) = U_RHS( GLOBI ) + LOC_U_RHS( IDIM,IPHASE,U_ILOC )
+                  END DO
+               END DO
+            END DO
+
+
+
          END DO Between_Elements_And_Boundary
 
          !      END DO Loop_Elements2
          !! *************************end loop over surfaces*********************************************
 
-
          ! ideally insert inner element stabilization here... 
-
 
          !      END DO Loop_Elements
       END DO Loop_Elements2
@@ -5346,12 +5366,11 @@
       DEALLOCATE( LOC_MASS_INV )
       DEALLOCATE( LOC_MASS )
       DEALLOCATE( RHS_DIFF_U )
-      DEALLOCATE( RHS_DIFF_V )
-      DEALLOCATE( RHS_DIFF_W )
+      DEALLOCATE( LOC_U_RHS )
 
       DEALLOCATE( DIFF_VEC_U )
-      DEALLOCATE( DIFF_VEC_V )
-      DEALLOCATE( DIFF_VEC_W )
+      !DEALLOCATE( DIFF_VEC_V )
+      !DEALLOCATE( DIFF_VEC_W )
 
       DEALLOCATE( DIFFGI_U, DIFFGI_V, DIFFGI_W )
 
