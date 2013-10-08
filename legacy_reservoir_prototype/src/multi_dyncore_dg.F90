@@ -2322,7 +2322,7 @@
       REAL, DIMENSION ( :, :), allocatable :: LOC_PLIKE_GRAD_SOU_COEF
       REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_SOURCE_CV, DIFF_VEC_U
 
-      REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_ABSORB,LOC_U_ABS_STAB, RHS_DIFF_U, LOC_U_RHS
+      REAL, DIMENSION ( :, :, : ), allocatable :: LOC_U_ABSORB,LOC_U_ABS_STAB, RHS_DIFF_U, LOC_U_RHS, SLOC_U_RHS
       REAL, DIMENSION ( :, :, :, : ), allocatable :: LOC_UDIFFUSION
       ! internal/external surfaces...
       REAL, DIMENSION ( :, : ), allocatable :: SLOC_UDEN, SLOC2_UDEN, SLOC_UDENOLD, SLOC2_UDENOLD
@@ -2687,6 +2687,7 @@
 
       ALLOCATE( RHS_DIFF_U( NDIM_VEL, NPHASE, U_NLOC ) )
       ALLOCATE( LOC_U_RHS( NDIM_VEL, NPHASE, U_NLOC ) )
+      ALLOCATE( SLOC_U_RHS( NDIM_VEL, NPHASE, U_SNLOC ) )
 
       ALLOCATE( DIFF_VEC_U( NDIM_VEL, NPHASE, U_NLOC ) )
       !ALLOCATE( DIFF_VEC_V(U_NLOC,NPHASE) )
@@ -4009,7 +4010,7 @@
 
 
 
-      LOC_U_RHS = 0.0
+      SLOC_U_RHS = 0.0
 
 
 
@@ -4021,6 +4022,10 @@
       Loop_Elements2: DO ELE = 1, TOTELE
 
          Between_Elements_And_Boundary: DO IFACE = 1, NFACE
+
+            ! clear local memory
+            SLOC_U_RHS = 0.0
+
             ELE2  = FACE_ELE( IFACE, ELE )
             SELE2 = MAX( 0, - ELE2 )
             SELE  = SELE2
@@ -5157,12 +5162,13 @@
 
 
             ! copy local memory
-            DO U_ILOC = 1, U_NLOC
+            DO U_SILOC = 1, U_SNLOC
+               U_ILOC=U_SLOC2LOC(U_SILOC)
                U_INOD = U_NDGLN( (ELE-1)*U_NLOC+U_ILOC ) 
                DO IPHASE = 1, NPHASE
                   DO IDIM = 1, NDIM
                      GLOBI = U_INOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
-                     U_RHS( GLOBI ) = U_RHS( GLOBI ) + LOC_U_RHS( IDIM,IPHASE,U_ILOC )
+                     U_RHS( GLOBI ) = U_RHS( GLOBI ) + SLOC_U_RHS( IDIM,IPHASE,U_SILOC )
                   END DO
                END DO
             END DO
@@ -5366,7 +5372,7 @@
       DEALLOCATE( LOC_MASS_INV )
       DEALLOCATE( LOC_MASS )
       DEALLOCATE( RHS_DIFF_U )
-      DEALLOCATE( LOC_U_RHS )
+      DEALLOCATE( LOC_U_RHS, SLOC_U_RHS )
 
       DEALLOCATE( DIFF_VEC_U )
       !DEALLOCATE( DIFF_VEC_V )
