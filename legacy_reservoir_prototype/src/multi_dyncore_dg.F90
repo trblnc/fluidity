@@ -2381,6 +2381,11 @@
       integer :: IPIV(U_NLOC)
       REAL :: RHS_U_CV(U_NLOC),RHS_U_CV_OLD(U_NLOC),UDEN_VFILT(NPHASE*U_NLOC),UDENOLD_VFILT(NPHASE*U_NLOC)
 
+      LOGICAL :: STORED_AC_SPAR_PT
+      INTEGER :: IDO_STORE_AC
+      INTEGER, DIMENSION( :, :, :, :, :, :, : ), allocatable :: POSINMAT_A_STORE
+      INTEGER, DIMENSION( :, :, :, :, :, : ), allocatable ::POSINMAT_A_STORE_SUF_DG
+
       ewrite(3,*) 'In ASSEMB_FORCE_CTY'
       !ewrite(3,*) 'Just double-checking sparsity patterns memory allocation:'
       !ewrite(3,*) 'FINDC with size,', size( FINDC ), ':', FINDC( 1 :  size( FINDC ) )
@@ -4869,8 +4874,19 @@
                            I = (IPHASE-1)*NDIM*U_NLOC + (IDIM-1)*U_NLOC + U_ILOC
                            J = (IPHASE-1)*NDIM*U_NLOC + (IDIM-1)*U_NLOC + U_JLOC
 
-                           IF ( .NOT.NO_MATRIX_STORE ) CALL POSINMAT( COUNT, IU_NOD_DIM_PHA, JU_NOD_DIM_PHA, &
-                                U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
+                           IF ( .NOT.NO_MATRIX_STORE ) THEN 
+
+                           !CALL POSINMAT( COUNT, IU_NOD_DIM_PHA, JU_NOD_DIM_PHA, &
+                           !     U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
+
+                           IDO_STORE_AC = 1 ; STORED_AC_SPAR_PT = .FALSE.
+                           CALL USE_POSINMAT_A_STORE( COUNT, IU_NOD, JU_NOD, &
+                                U_NONODS, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA, &
+                                IDO_STORE_AC, STORED_AC_SPAR_PT, POSINMAT_A_STORE, &
+                                ELE, U_ILOC, IPHASE, IDIM, U_JLOC, JPHASE, JDIM, &
+                                TOTELE, U_NLOC, NPHASE, NDIM_VEL ) 
+
+                           END IF
 
                            IF ( SELE2 == 0 ) THEN
 
@@ -4890,26 +4906,34 @@
 
                               ELSE ! .NOT.NO_MATRIX_STORE
 
-                                 CALL POSINMAT( COUNT2, IU_NOD_DIM_PHA, JU_NOD2_DIM_PHA, &
-                                      U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
+                                 !CALL POSINMAT( COUNT2, IU_NOD_DIM_PHA, JU_NOD2_DIM_PHA, &
+                                 !     U_NONODS * NPHASE * NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
+
+                                 IDO_STORE_AC = 1 ; STORED_AC_SPAR_PT = .FALSE.
+                                 CALL USE_POSINMAT_A_STORE_SUF_DG( COUNT2, IU_NOD, JU_NOD2, &
+                                      U_NONODS, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA, &
+                                      IDO_STORE_AC, STORED_AC_SPAR_PT, POSINMAT_A_STORE_SUF_DG, &
+                                      ELE, IFACE, U_SILOC, U_SJLOC, IPHASE, IPHASE, IDIM, &
+                                      TOTELE, NFACE, U_SNLOC, NPHASE, NDIM_VEL )
+
 
                                  IF(MOM_CONSERV) THEN
-                                    DGM_PHA( COUNT )  =  DGM_PHA( COUNT )  + NN_SNDOTQ_OUT
-                                    DGM_PHA( COUNT2 ) =  DGM_PHA( COUNT2 ) + NN_SNDOTQ_IN
+                                    DGM_PHA( COUNT ) = DGM_PHA( COUNT ) + NN_SNDOTQ_OUT
+                                    DGM_PHA( COUNT2 ) = DGM_PHA( COUNT2 ) + NN_SNDOTQ_IN
                                  ELSE
-                                    DGM_PHA( COUNT )  =  DGM_PHA( COUNT )  - NN_SNDOTQ_IN
+                                    DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) - NN_SNDOTQ_IN
                                     DGM_PHA( COUNT2 ) =  DGM_PHA( COUNT2 ) + NN_SNDOTQ_IN
                                  END IF
                                  ! viscosity...
-                                 DGM_PHA( COUNT )  =  DGM_PHA( COUNT )  + VLM_NEW 
-                                 DGM_PHA( COUNT2 ) =  DGM_PHA( COUNT2 ) - VLM_NEW 
+                                 DGM_PHA( COUNT ) = DGM_PHA( COUNT ) + VLM_NEW 
+                                 DGM_PHA( COUNT2 ) = DGM_PHA( COUNT2 ) - VLM_NEW 
                              
                               END IF ! NO_MATRIX_STORE
 
-                              !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) +  VLM_NEW 
-                              !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) +  MAX( 0.0, VLM_NEW )
+                              !PIVIT_MAT( ELE, I, J ) = PIVIT_MAT( ELE, I, J ) + VLM_NEW
+                              !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) + MAX( 0.0, VLM_NEW )
 
-                              RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC )  &
+                              RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) = RHS_DIFF_U( IDIM,IPHASE,U_ILOC ) &
                                    - VLM_OLD * SLOC_UOLD( IDIM,IPHASE,U_SJLOC ) + VLM_OLD * SLOC2_UOLD( IDIM,IPHASE,U_SJLOC ) &
                                    - VLM_NEW * SLOC_U( IDIM,IPHASE,U_SJLOC ) + VLM_NEW * SLOC2_U( IDIM,IPHASE,U_SJLOC )
 
@@ -4938,7 +4962,7 @@
                                  !PIVIT_MAT( ELE, I, I ) = PIVIT_MAT( ELE, I, I ) + MAX( 0.0, VLM * SUF_ROB1_BC( IDIM,IPHASE,U_SJLOC,SELE2 ) )
                                  IF ( NO_MATRIX_STORE ) THEN
                                     SLOC_U_RHS( IDIM,IPHASE,U_SILOC ) = SLOC_U_RHS( IDIM,IPHASE,U_SILOC ) &
-                                         - VLM * SUF_ROB1_BC( IDIM,IPHASE,U_SJLOC,SELE2 ) * SLOC_U( IDIM,IPHASE,U_SJLOC ) 
+                                         - VLM * SUF_ROB1_BC( IDIM,IPHASE,U_SJLOC,SELE2 ) * SLOC_U( IDIM,IPHASE,U_SJLOC )
                                  ELSE
                                     DGM_PHA( COUNT ) =  DGM_PHA( COUNT ) + VLM * SUF_ROB1_BC( IDIM,IPHASE,U_SJLOC,SELE2 )
                                  END IF

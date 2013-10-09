@@ -302,7 +302,7 @@
       ! Form X = A^{-1} B ;  Useful subroutine for inverse
       ! This sub overwrites the matrix A. 
 
-     Cond_LUDecomp: IF( .NOT. GOTDEC ) THEN
+      Cond_LUDecomp: IF( .NOT. GOTDEC ) THEN
 
          call dgetrf(NMX,NMX,A,NMX,IPIV,INFO)
 
@@ -482,12 +482,12 @@
          endif
          CALL CT_MULT( CMC_COLOR_VEC, DU, DV, DW, CV_NONODS, U_NONODS, NDIM, NPHASE, &
               CT, NCOLCT, FINDCT, COLCT )
-      IF(IGOT_CMC_PRECON.NE.0) THEN
-         CALL CT_MULT_WITH_C( CMC_COLOR_VEC2, DU_LONG, CV_NONODS, U_NONODS, NDIM, NPHASE, &
-                C, NCOLC, FINDC, COLC )
-!         CALL CT_MULT( CMC_COLOR_VEC2, DU, DV, DW, CV_NONODS, U_NONODS, NDIM, NPHASE, &
-!              *****CT, NCOLCT, FINDCT, COLCT )
-      ENDIF
+         IF(IGOT_CMC_PRECON.NE.0) THEN
+            CALL CT_MULT_WITH_C( CMC_COLOR_VEC2, DU_LONG, CV_NONODS, U_NONODS, NDIM, NPHASE, &
+                 C, NCOLC, FINDC, COLC )
+            !         CALL CT_MULT( CMC_COLOR_VEC2, DU, DV, DW, CV_NONODS, U_NONODS, NDIM, NPHASE, &
+            !              *****CT, NCOLCT, FINDCT, COLCT )
+         ENDIF
 
          ! Matrix vector involving the mass diagonal term
          DO CV_NOD = 1, CV_NONODS
@@ -800,7 +800,7 @@
       ! Local variables
       INTEGER :: U_INOD, COUNT, P_JNOD, IPHASE, I1, IDIM, COUNT_DIM_PHA
 
-!      CDP = 0.0
+      !      CDP = 0.0
       DP = 0.0
 
       Loop_VelNodes: DO U_INOD = 1, U_NONODS
@@ -812,8 +812,8 @@
                Loop_Dim: DO IDIM = 1, NDIM
                   COUNT_DIM_PHA = COUNT + NCOLC*(IDIM-1) + NCOLC*NDIM*(IPHASE-1)
                   I1 = U_INOD + (IDIM-1)*U_NONODS + ( IPHASE - 1 ) * NDIM * U_NONODS
-!                  CDP( I1 ) = CDP( I1 ) + C( COUNT_DIM_PHA ) * DP( P_JNOD )
-              DP( P_JNOD ) = DP( P_JNOD ) + C( COUNT_DIM_PHA ) * U_LONG( I1 )
+                  !                  CDP( I1 ) = CDP( I1 ) + C( COUNT_DIM_PHA ) * DP( P_JNOD )
+                  DP( P_JNOD ) = DP( P_JNOD ) + C( COUNT_DIM_PHA ) * U_LONG( I1 )
                END DO Loop_Dim
             END DO Loop_Phase
 
@@ -900,6 +900,7 @@
          IDO_STORE_AC_SPAR_PT, STORED_AC_SPAR_PT, POSINMAT_A_STORE_SUF_DG, &
          ELE,IFACE, U_SILOC, U_SJLOC, IPHASE, JPHASE, IDIM, &
          TOTELE, NFACE, U_SNLOC, NPHASE, NDIM_VEL )
+      IMPLICIT NONE
       INTEGER, intent( inout ) :: COUNT
       INTEGER, intent( in ) :: U_INOD, U_JNOD, ELE, IFACE, U_SILOC, U_SJLOC, IPHASE, JPHASE, IDIM
       INTEGER, intent( in ) :: NCOLDGM_PHA, U_NONODS, TOTELE, NFACE, U_SNLOC, NPHASE, NDIM_VEL
@@ -913,16 +914,60 @@
 
       ! Find COUNT - position in matrix 
       IF ( STORED_AC_SPAR_PT ) THEN
-         COUNT = POSINMAT_A_STORE_SUF_DG( ELE,IFACE,U_SILOC, U_SJLOC, IPHASE, IDIM ) 
+         COUNT = POSINMAT_A_STORE_SUF_DG( ELE, IFACE, U_SILOC, U_SJLOC, IPHASE, IDIM ) 
       ELSE
-         U_INOD_IPHA_IDIM = (U_INOD-1)*NPHASE*NDIM_VEL + (IPHASE-1)*NDIM_VEL + IDIM
-         U_JNOD_JPHA_JDIM = (U_JNOD-1)*NPHASE*NDIM_VEL + (JPHASE-1)*NDIM_VEL + IDIM
+         ! for new ordering - yet to be implemented
+         !U_INOD_IPHA_IDIM = (U_INOD-1)*NPHASE*NDIM_VEL + (IPHASE-1)*NDIM_VEL + IDIM
+         !U_JNOD_JPHA_JDIM = (U_JNOD-1)*NPHASE*NDIM_VEL + (JPHASE-1)*NDIM_VEL + IDIM
+         U_INOD_IPHA_IDIM = U_INOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+         U_JNOD_JPHA_JDIM = U_JNOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
          CALL POSINMAT( COUNT, U_INOD_IPHA_IDIM, U_JNOD_JPHA_JDIM,  &
               U_NONODS*NPHASE*NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
-         IF ( IDO_STORE_AC_SPAR_PT == 0 ) POSINMAT_A_STORE_SUF_DG( ELE,IFACE,U_SILOC,U_SJLOC,IPHASE,IDIM ) = COUNT
+         IF ( IDO_STORE_AC_SPAR_PT == 0 ) POSINMAT_A_STORE_SUF_DG( ELE, IFACE, U_SILOC, U_SJLOC, IPHASE, IDIM ) = COUNT
       END IF
       RETURN
     END SUBROUTINE USE_POSINMAT_A_STORE_SUF_DG
+
+
+    SUBROUTINE USE_POSINMAT_A_STORE( COUNT, U_INOD, U_JNOD,  &
+         U_NONODS, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA,  &
+         IDO_STORE_AC_SPAR_PT, STORED_AC_SPAR_PT, POSINMAT_A_STORE, ELE, &
+         U_ILOC, IPHASE, IDIM, U_JLOC, JPHASE, JDIM, &
+         TOTELE, U_NLOC, NPHASE, NDIM_VEL )
+      IMPLICIT NONE
+      INTEGER, intent( inout ) :: COUNT
+      INTEGER, intent( in ) :: U_INOD, U_JNOD, U_ILOC,IPHASE,IDIM, U_JLOC, JPHASE, JDIM
+      INTEGER, intent( in ) :: NCOLDGM_PHA, U_NONODS, NPHASE, NDIM_VEL, ELE, TOTELE
+      INTEGER, intent( in ) :: IDO_STORE_AC_SPAR_PT, U_NLOC
+      LOGICAL, intent( in ) :: STORED_AC_SPAR_PT
+      INTEGER, DIMENSION( U_NONODS*NPHASE*NDIM_VEL + 1), intent( in ) :: FINDGM_PHA
+      INTEGER, DIMENSION( NCOLDGM_PHA ), intent( in ) :: COLDGM_PHA
+      INTEGER, DIMENSION( TOTELE*IDO_STORE_AC_SPAR_PT, U_NLOC, NPHASE, NDIM_VEL, U_NLOC, NPHASE, NDIM_VEL ), intent( inout ) :: POSINMAT_A_STORE
+      ! local variables...
+      INTEGER :: U_INOD_IPHA_IDIM, U_JNOD_JPHA_JDIM
+
+      ! Find COUNT - position in matrix 
+      IF ( STORED_AC_SPAR_PT ) THEN
+         COUNT = POSINMAT_A_STORE( ELE, U_ILOC, IPHASE, IDIM, U_JLOC, JPHASE, JDIM ) 
+      ELSE
+         ! for new ordering - yet to be implemented
+         !U_INOD_IPHA_IDIM=(U_INOD-1)*NPHASE*NDIM_VEL + (IPHASE-1)*NDIM_VEL + IDIM
+         !U_JNOD_JPHA_JDIM=(U_JNOD-1)*NPHASE*NDIM_VEL + (JPHASE-1)*NDIM_VEL + JDIM
+         U_INOD_IPHA_IDIM = U_INOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+         U_JNOD_JPHA_JDIM = U_JNOD + (IDIM-1)*U_NONODS + (IPHASE-1)*NDIM_VEL*U_NONODS
+         CALL POSINMAT( COUNT, U_INOD_IPHA_IDIM, U_JNOD_JPHA_JDIM,  &
+              U_NONODS*NPHASE*NDIM_VEL, FINDGM_PHA, COLDGM_PHA, NCOLDGM_PHA )
+         IF ( IDO_STORE_AC_SPAR_PT == 0 ) POSINMAT_A_STORE( ELE,U_ILOC, IPHASE, IDIM, U_JLOC, IPHASE, JDIM ) = COUNT
+      END IF
+      RETURN
+    END SUBROUTINE USE_POSINMAT_A_STORE
+
+
+
+
+
+
+
 
   end module matrix_operations
 

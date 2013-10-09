@@ -3415,16 +3415,23 @@ end if
 
                 END DO
              END DO
-         ELSE 
+          ELSE 
              DO U_ILOC=1,U_NLOC
                 U_INOD=U_NDGLN((ELE-1)*U_NLOC+U_ILOC) 
 ! Add into local rhs:
                 U_RHS( U_INOD, :, : ) = LOC_U_RHS( U_ILOC, :, : ) 
              END DO
-         ENDIF
+          ENDIF
 ! ****************SUBROUTINE PUT_LOC_IN_GLOBAL_MAT -END **********************
 
       END DO Loop_Elements
+
+
+
+
+
+
+
 
 
       !! *************************loop over surfaces*********************************************
@@ -4148,7 +4155,7 @@ end if
       END DO Loop_Elements2
 
 ! We have stored the C sparcity matrix
-      STORED_C_SPAR_PT=.TRUE.
+      STORED_AC_SPAR_PT=.TRUE.
 
       !ewrite(3,*)'p=',p
       !ewrite(3,*)'U_RHS:',U_RHS
