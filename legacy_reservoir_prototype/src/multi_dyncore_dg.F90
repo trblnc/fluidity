@@ -2471,7 +2471,7 @@
       GOT_DIFFUS = .FALSE.
 
       ! is this the 1st iteration of the time step. 
-      firstst=(sum((u(:)-uold(:))**2).lt.1.e-10)
+      firstst = (sum((u(:)-uold(:))**2).lt.1.e-10)
       if(NDIM_VEL.ge.2) firstst=firstst.and.(sum((v(:)-vold(:))**2).lt.1.e-10)
       if(NDIM_VEL.ge.3) firstst=firstst.and.(sum((w(:)-wold(:))**2).lt.1.e-10)
 
@@ -2782,7 +2782,7 @@
 
       GOT_UDEN = ( R2NORM( UDEN, CV_NONODS * NPHASE ) /= 0.0 )
 
-      JUST_BL_DIAG_MAT=( ( .NOT. GOT_DIFFUS ) .AND. ( .NOT. GOT_UDEN ) )
+      JUST_BL_DIAG_MAT = ( ( .NOT. GOT_DIFFUS ) .AND. ( .NOT. GOT_UDEN ) )
 
       !ewrite(3,*) minval( udiffusion(:, 1,1,1) ), maxval( udiffusion(:, 1,1,1) )
       !ewrite(3,*) minval( udiffusion(:, 1,2,1) ), maxval( udiffusion(:, 1,2,1) )
@@ -2792,25 +2792,28 @@
       !     RESID_BASED_STAB_DIF,BETWEEN_ELE_STAB,GOT_DIFFUS
       !stop 292
 
-      ALLOCATE(UDIFF_SUF_STAB(NDIM,NDIM,NDIM_VEL,NPHASE,SBCVNGI))
-      UDIFF_SUF_STAB=0.0
+      ALLOCATE( UDIFF_SUF_STAB( NDIM,NDIM,NDIM_VEL,NPHASE,SBCVNGI ) )
+      UDIFF_SUF_STAB = 0.0
 
-      IF(BETWEEN_ELE_STAB) THEN
+      IF ( BETWEEN_ELE_STAB ) THEN
          ! Calculate stabilization diffusion coefficient between elements...
-         ALLOCATE(DIFF_FOR_BETWEEN_U(TOTELE,NPHASE,U_NLOC))
-         IF(NDIM_VEL.GE.2) ALLOCATE(DIFF_FOR_BETWEEN_V(TOTELE,NPHASE,U_NLOC))
-         IF(NDIM_VEL.GE.3) ALLOCATE(DIFF_FOR_BETWEEN_W(TOTELE,NPHASE,U_NLOC))
-         ALLOCATE(MAT_ELE(TOTELE,U_NLOC,U_NLOC))
-         DIFF_FOR_BETWEEN_U=0.0
-         IF(NDIM_VEL.GE.2) DIFF_FOR_BETWEEN_V=0.0
-         IF(NDIM_VEL.GE.3) DIFF_FOR_BETWEEN_W=0.0
-         MAT_ELE=0.0
-      ENDIF
+         ALLOCATE( DIFF_FOR_BETWEEN_U( TOTELE,NPHASE,U_NLOC ) )
+         DIFF_FOR_BETWEEN_U = 0.0
+         IF( NDIM_VEL >= 2 ) THEN
+            ALLOCATE( DIFF_FOR_BETWEEN_V( TOTELE,NPHASE,U_NLOC ) )
+            DIFF_FOR_BETWEEN_V = 0.0
+         END IF
+         IF ( NDIM_VEL >= 3 ) THEN
+            ALLOCATE( DIFF_FOR_BETWEEN_W( TOTELE,NPHASE,U_NLOC ) )
+            DIFF_FOR_BETWEEN_W = 0.0
+         END IF
+         ALLOCATE( MAT_ELE( TOTELE,U_NLOC,U_NLOC ) )
+         MAT_ELE = 0.0
+      END IF
 
-
-      D1   = ( NDIM == 1  )
+      D1 = ( NDIM == 1  )
       DCYL = ( NDIM == -2 )
-      D3   = ( NDIM == 3  )
+      D3 = ( NDIM == 3 )
 
       NO_MATRIX_STORE = ( NCOLDGM_PHA <= 1 )
       IF ( ( .NOT. JUST_BL_DIAG_MAT ) .and. ( .NOT. NO_MATRIX_STORE ) ) DGM_PHA = 0.0
@@ -2855,7 +2858,7 @@
       !ewrite(3,*)'SBCVFEN',SBCVFEN
       !stop 768
 
-      ALLOCATE( FACE_ELE( NFACE, TOTELE ))
+      ALLOCATE( FACE_ELE( NFACE, TOTELE ) )
       ! Calculate FACE_ELE
       CALL CALC_FACE_ELE( FACE_ELE, TOTELE, STOTEL, NFACE, &
            NCOLELE, FINELE, COLELE, CV_NLOC, CV_SNLOC, CV_NONODS, CV_NDGLN, CV_SNDGLN, &
@@ -2863,7 +2866,7 @@
 
       !ewrite(3,*) 'got_diffus:', got_diffus
 
-      IF( GOT_DIFFUS ) THEN
+      IF ( GOT_DIFFUS ) THEN
          CALL DG_DERIVS_UVW( U, UOLD, V, VOLD, W, WOLD, &
               DUX_ELE, DUY_ELE, DUZ_ELE, DUOLDX_ELE, DUOLDY_ELE, DUOLDZ_ELE, &
               DVX_ELE, DVY_ELE, DVZ_ELE, DVOLDX_ELE, DVOLDY_ELE, DVOLDZ_ELE, &
@@ -2878,7 +2881,7 @@
               SUF_U_BC,SUF_V_BC,SUF_W_BC, &
               WIC_U_BC_DIRICHLET, SBCVNGI, SBUFEN, SBUFENSLX, SBUFENSLY, SBCVFEWEIGH, &
               SBCVFEN, SBCVFENSLX, SBCVFENSLY)
-      ENDIF
+      END IF
 
       Loop_Elements: DO ELE = 1, TOTELE ! Volume integral
 
@@ -2889,72 +2892,59 @@
               CVFENX, CVFENY, CVFENZ, &
               U_NLOC, UFENLX, UFENLY, UFENLZ, UFENX, UFENY, UFENZ ) 
          ! Adjust the volume according to the number of levels. 
-         VOLUME=VOLUME/REAL(NLEV)
-         MASS_ELE(ELE)=VOLUME
+         VOLUME = VOLUME / REAL( NLEV )
+         MASS_ELE( ELE ) = VOLUME
 
 
          ! *********subroutine Determine local vectors...
-         LOC_U_RHS  =0.0
+         LOC_U_RHS = 0.0
 
          DO ILEV = 1, NLEV
             DO U_ILOC = 1 +(ILEV-1)*U_NLOC2, ILEV*U_NLOC2
-
-               U_INOD = U_NDGLN(( ELE - 1 ) * U_NLOC + U_ILOC )
+               U_INOD = U_NDGLN( ( ELE - 1 ) * U_NLOC + U_ILOC )
                DO IPHASE=1,NPHASE
-                  DO IDIM=1,NDIM_VEL
-                     IF(IDIM==1) THEN
+                  DO IDIM = 1, NDIM_VEL
+                     IF ( IDIM==1 ) THEN
                         LOC_U(IDIM,IPHASE,U_ILOC)=U(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_UOLD(IDIM,IPHASE,U_ILOC)=UOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     END IF
-                     IF(IDIM==2) THEN
-                        LOC_U(IDIM,IPHASE,U_ILOC)=V(U_INOD+(IPHASE-1)*U_NONODS)
-                        LOC_UOLD(IDIM,IPHASE,U_ILOC)=VOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     END IF
-                     IF(IDIM==3) THEN
-                        LOC_U(IDIM,IPHASE,U_ILOC)=W(U_INOD+(IPHASE-1)*U_NONODS)
-                        LOC_UOLD(IDIM,IPHASE,U_ILOC)=WOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     END IF
-                  END DO
-                  DO IDIM=1,NDIM
-                     IF(IDIM==1) THEN
                         LOC_NU(IDIM,IPHASE,U_ILOC)=NU(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NUOLD(IDIM,IPHASE,U_ILOC)=NUOLD(U_INOD+(IPHASE-1)*U_NONODS)
                      END IF
-                     IF(IDIM==2) THEN
+                     IF ( IDIM==2 ) THEN
+                        LOC_U(IDIM,IPHASE,U_ILOC)=V(U_INOD+(IPHASE-1)*U_NONODS)
+                        LOC_UOLD(IDIM,IPHASE,U_ILOC)=VOLD(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NU(IDIM,IPHASE,U_ILOC)=NV(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NUOLD(IDIM,IPHASE,U_ILOC)=NVOLD(U_INOD+(IPHASE-1)*U_NONODS)
-                     ENDIF
-                     IF(IDIM==3) THEN
+                     END IF
+                     IF ( IDIM==3 ) THEN
+                        LOC_U(IDIM,IPHASE,U_ILOC)=W(U_INOD+(IPHASE-1)*U_NONODS)
+                        LOC_UOLD(IDIM,IPHASE,U_ILOC)=WOLD(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NU(IDIM,IPHASE,U_ILOC)=NW(U_INOD+(IPHASE-1)*U_NONODS)
                         LOC_NUOLD(IDIM,IPHASE,U_ILOC)=NWOLD(U_INOD+(IPHASE-1)*U_NONODS)
                      END IF
                   END DO
-               END DO
-
             END DO
          END DO
 
          DO CV_ILOC = 1, CV_NLOC
-            CV_INOD = CV_NDGLN(( ELE - 1 ) * CV_NLOC + CV_ILOC )
-
-            DO IPHASE=1,NPHASE
-               LOC_UDEN( IPHASE, CV_ILOC )   =UDEN( CV_INOD + (IPHASE-1)*CV_NONODS)
-               LOC_UDENOLD( IPHASE, CV_ILOC)=UDENOLD( CV_INOD + (IPHASE-1)*CV_NONODS )
-               IF(IPLIKE_GRAD_SOU.NE.0) THEN
-                  LOC_PLIKE_GRAD_SOU_COEF( IPHASE, CV_ILOC )=PLIKE_GRAD_SOU_COEF( CV_INOD + (IPHASE-1)*CV_NONODS )
-               ENDIF
-               DO IDIM=1,NDIM_VEL
-                  LOC_U_SOURCE_CV( IDIM,IPHASE,CV_ILOC)=U_SOURCE_CV( CV_INOD + (IDIM-1)*CV_NONODS + (IPHASE-1)*NDIM_VEL*CV_NONODS)
+            CV_INOD = CV_NDGLN( ( ELE - 1 ) * CV_NLOC + CV_ILOC )
+            DO IPHASE =1, NPHASE
+               LOC_UDEN( IPHASE, CV_ILOC ) = UDEN( CV_INOD + (IPHASE-1)*CV_NONODS )
+               LOC_UDENOLD( IPHASE, CV_ILOC) = UDENOLD( CV_INOD + (IPHASE-1)*CV_NONODS )
+               IF ( IPLIKE_GRAD_SOU /= 0 ) THEN
+                  LOC_PLIKE_GRAD_SOU_COEF( IPHASE, CV_ILOC ) = PLIKE_GRAD_SOU_COEF( CV_INOD + (IPHASE-1)*CV_NONODS )
+               END IF
+               DO IDIM = 1, NDIM_VEL
+                  LOC_U_SOURCE_CV( IDIM,IPHASE,CV_ILOC ) = U_SOURCE_CV( CV_INOD + (IDIM-1)*CV_NONODS + (IPHASE-1)*NDIM_VEL*CV_NONODS )
                END DO
             END DO
          END DO
 
-
          DO MAT_ILOC = 1, MAT_NLOC
-            MAT_INOD = MAT_NDGLN(( ELE - 1 ) * MAT_NLOC + MAT_ILOC )
-            LOC_U_ABSORB( :, :, MAT_ILOC)=U_ABSORB( MAT_INOD, :, : ) ! memory of U_ABSORB is wrong way around...
-            LOC_U_ABS_STAB( :, :, MAT_ILOC)=U_ABS_STAB( MAT_INOD, :, : )
-            LOC_UDIFFUSION( :,:,:, MAT_ILOC)=UDIFFUSION( MAT_INOD, :,:,: )
+            MAT_INOD = MAT_NDGLN( ( ELE - 1 ) * MAT_NLOC + MAT_ILOC )
+            LOC_U_ABSORB( :, :, MAT_ILOC ) = U_ABSORB( MAT_INOD, :, : ) ! memory of U_ABSORB is wrong way around...
+            LOC_U_ABS_STAB( :, :, MAT_ILOC ) = U_ABS_STAB( MAT_INOD, :, : )
+            LOC_UDIFFUSION( :,:,:, MAT_ILOC ) = UDIFFUSION( MAT_INOD, :,:,: )
          END DO
          ! *********subroutine Determine local vectors...
 
@@ -2963,12 +2953,8 @@
          !ewrite(3,*)'volume=',volume
          !stop 2892
 
-         UD = 0.0
-         VD = 0.0
-         WD = 0.0
-         UDOLD = 0.0
-         VDOLD = 0.0
-         WDOLD = 0.0
+         UD = 0.0 ; VD = 0.0 ; WD = 0.0
+         UDOLD = 0.0 ; VDOLD = 0.0 ; WDOLD = 0.0
          DO ILEV = 1, NLEV
             DO U_ILOC = 1 +(ILEV-1)*U_NLOC2, ILEV*U_NLOC2
                !ewrite(3,*) 'ele, u_nonods, iloc:',ele, u_nonods, iloc
