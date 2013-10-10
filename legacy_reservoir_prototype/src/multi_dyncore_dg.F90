@@ -2925,6 +2925,8 @@
                   END DO
             END DO
          END DO
+      END DO
+
 
          DO CV_ILOC = 1, CV_NLOC
             CV_INOD = CV_NDGLN( ( ELE - 1 ) * CV_NLOC + CV_ILOC )
