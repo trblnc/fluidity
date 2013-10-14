@@ -311,10 +311,13 @@
          ELSE
 
             IF( IGOT_T2 == 1 ) THEN
-               CALL SIMPLE_SOLVER( ACV, T, CV_RHS,  &
-                    NCOLACV, nphase * CV_NONODS, FINACV, COLACV, MIDACV,  &
-                    1.E-10, 1., 0., 1., 400 )
-            ELSE
+               !CALL SIMPLE_SOLVER( ACV, T, CV_RHS,  &
+               !     NCOLACV, nphase * CV_NONODS, FINACV, COLACV, MIDACV,  &
+               !     1.E-10, 1., 0., 1., 400 )
+               CALL SOLVER( ACV, T, CV_RHS, &
+                    FINACV, COLACV, &
+                    trim('/material_phase::Component1/scalar_field::ComponentMassFractionPhase1/prognostic') )
+       ELSE
                CALL SOLVER( ACV, T, CV_RHS, &
                     FINACV, COLACV, &
                     trim(option_path) )
