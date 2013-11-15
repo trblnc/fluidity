@@ -69,6 +69,7 @@
 
       integer, dimension(:), pointer :: Tnodes, MatNodes
       integer :: phase, idim, nodes,ele
+      integer :: stat
 
       mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
 
@@ -81,7 +82,10 @@
             call get_option(trim(option_path),&
                  CoefficientOfRestitution,default=DEFAULT_E)
             distribution_function=>extract_scalar_field(state(phase),"RadialDistributionFunction")
-            temp=>extract_scalar_field(state(phase),"Temperature")
+            temp=>extract_scalar_field(state(phase),"Temperature",stat)
+            if (stat/=0) then
+               temp=>extract_scalar_field(state(1),"Temperature")
+            end if
             rho=> extract_scalar_field(state(phase),"Density")
             viscosity=> extract_tensor_field(state(phase),"Viscosity")
             nodes=node_count(distribution_function)
@@ -116,7 +120,7 @@
       type(state_type), dimension(:), intent(in) ::  state
       real, dimension(:), target, intent(in) :: PhaseVolumeFractions, PhaseVolumeFractionsOld
 
-      integer :: phase, nodes
+      integer :: phase, nodes, j
       type(scalar_field), pointer :: distribution_function
       real, dimension(:), pointer :: PhaseVolumeFraction,PhaseVolumeFractionOld
 
@@ -129,17 +133,33 @@
          if (have_option(trim(option_path))) then
             distribution_function=>extract_scalar_field(state(phase),"RadialDistributionFunction")
             nodes=node_count(distribution_function)
-            PhaseVolumeFraction=>PhaseVolumeFractions((phase-1)*nodes+1:phase*nodes)
-            PhaseVolumeFractionOld=>PhaseVolumeFractionsOld((phase-1)*nodes+1:phase*nodes)
 
-            call get_option(trim(option_path)//'/function/name',dist_type)
+            call get_option(trim(option_path)//'/diagnostic/function/name',dist_type)
             select case(dist_type)
 
             case('Gidaspow')
+               PhaseVolumeFraction=>PhaseVolumeFractions((phase-1)*nodes+1:phase*nodes)
+               PhaseVolumeFractionOld=>PhaseVolumeFractionsOld((phase-1)*nodes+1:phase*nodes)
+
+               call get_option(trim(option_path)//'/diagnostic/maximum_phase_volume_fraction',MaxVolFrac)
+               distribution_function%val=(3.0/5.0)*1.0/(max(1.0e-16,1.0-(min(abs(0.5*PhaseVolumeFraction+0.5*PhaseVolumeFractionOld)/MaxVolFrac,1.0))**(1.0/3.0)))
+
+            case('BulkGidaspow')
+               allocate(PhaseVolumeFraction(nodes))
+               PhaseVolumeFraction=0
+               do j=1,size(state)
+                  if (have_option(trim(state(j)%option_path)//"multiphase_properties/drag/diameter")) then
+                     PhaseVolumeFraction=PhaseVolumeFraction+0.5*(&
+                          PhaseVolumeFractions((j-1)*nodes+1:j*nodes)&
+                          +PhaseVolumeFractionsOld((j-1)*nodes+1:j*nodes))
+                  end if
+               end do
 
                call get_option(trim(option_path)//'/maximum_phase_volume_fraction',MaxVolFrac)
-               distribution_function%val=(3.0/5.0)*1.0/(max(1.0e-16,1.0-(min(abs(0.0*PhaseVolumeFraction+1.0*PhaseVolumeFractionOld)/MaxVolFrac,1.0))**(1.0/3.0)))
-
+               distribution_function%val=(3.0/5.0)*1.0/&
+                    (max(1.0e-16,1.0-(min(abs(0.5*PhaseVolumeFraction&
+                    +0.5*PhaseVolumeFractionOld)/MaxVolFrac,1.0))**(1.0/3.0)))  
+               deallocate(PhaseVolumeFraction)
             end select
          end if
       end do
@@ -166,15 +186,46 @@
          PhaseVolumeFractions,PhaseVolumeFractionsOld)
       type(state_type), dimension(:) :: state
       type(scalar_field), dimension(:) :: solid_phase_pressure
+      type(scalar_field) :: SolidVolumeFraction
       real, dimension(:), target, intent(in) :: PhaseVolumeFractions, PhaseVolumeFractionsOld
       type(scalar_field), pointer :: distribution_function, density, temperature, PVF,OldPVF
       type(scalar_field), pointer :: spp
-      integer :: phase, nodes
-      real, dimension(:), pointer :: PhaseVolumeFraction,OldPhaseVolumeFraction
+      integer :: phase, nodes, j
+      real, dimension(:), pointer :: PhaseVolumeFraction,OldPhaseVolumeFraction 
       real :: CoefficientOfRestitution
       character(len=OPTION_PATH_LEN) :: option_path
+      logical :: bulk_formulation
+      integer :: bulk_phase
+      integer :: stat
 
+      bulk_formulation=.false.
 
+      do phase=1,size(state)
+         if (have_option(trim(state(phase)%option_path)&
+              //"scalar_field::RadialDistributionFunction/function::BulkGidaspow")) then
+            bulk_formulation=.true.
+            bulk_phase=phase
+
+            distribution_function=>extract_scalar_field(state(phase),"RadialDistributionFunction")
+            nodes=node_count(distribution_function)
+
+            call allocate(SolidVolumeFraction,distribution_function%mesh,"SolidVolumeFraction")
+            call zero(SolidVolumeFraction)
+            
+            do j=1,size(state)
+
+               if (have_option(trim(state(j)%option_path)//"multiphase_properties/drag/diameter")) then
+                  SolidVolumeFraction%val=SolidVolumeFraction%val+0.5*(&
+                       PhaseVolumeFractions((j-1)*nodes+1:j*nodes)&
+                       +PhaseVolumeFractionsOld((j-1)*nodes+1:j*nodes))
+               end if
+
+            end do
+
+            exit
+         end if
+      end do
+      
       do phase=1,size(state)
          option_path='/material_phase['//int2str(phase-1)//']'
 
@@ -182,8 +233,8 @@
 
             call get_option(trim(option_path)//'/multiphase_properties/coefficient_of_restitution',&
                  CoefficientOfRestitution,default=DEFAULT_E)
+            
             distribution_function=>extract_scalar_field(state(phase),"RadialDistributionFunction")
-            Temperature=>extract_scalar_field(state(phase),"Temperature")
             Density=>extract_scalar_field(state(phase),"Density")
             nodes=node_count(distribution_function)
             PVF=>extract_scalar_field(state(phase),"PhaseVolumeFraction")
@@ -191,12 +242,27 @@
             PhaseVolumeFraction=>PhaseVolumeFractions((phase-1)*nodes+1:phase*nodes)
             OldPhaseVolumeFraction=>PhaseVolumeFractionsOld((phase-1)*nodes+1:phase*nodes)
 
-         !   PVF%val=PhaseVolumeFraction
-          !  OldPVF%val=OldPhaseVolumeFraction
-            call allocate(solid_phase_pressure(phase),Temperature%mesh,"SolidPhasePressure")
 
-            solid_phase_pressure(phase)%val=density%val*temperature%val*&
-                 (1.0+2.0*(1.0+CoefficientOfRestitution)*distribution_function%val*PhaseVolumeFraction)
+            if (bulk_formulation) then
+
+               Temperature=>extract_scalar_field(state(bulk_phase),"Temperature")
+               call allocate(solid_phase_pressure(phase),Temperature%mesh,"SolidPhasePressure")
+               solid_phase_pressure(phase)%val=density%val*temperature%val*&
+                    (1.0+2.0*(1.0+CoefficientOfRestitution)*distribution_function%val*SolidVolumeFraction%val)
+
+
+            else
+               Temperature=>extract_scalar_field(state(phase),"Temperature",stat)
+               if (stat/=0) then 
+                  Temperature=>extract_scalar_field(state(1),"Temperature",stat)
+               end if
+               call allocate(solid_phase_pressure(phase),Temperature%mesh,"SolidPhasePressure")
+
+               solid_phase_pressure(phase)%val=density%val*temperature%val*&
+                    (1.0+2.0*(1.0+CoefficientOfRestitution)*distribution_function%val*PhaseVolumeFraction)
+
+            end if
+
 
             if (has_scalar_field(state(phase),"SolidPhasePressure")) then
                spp=>extract_scalar_field(state(phase),"SolidPhasePressure")
@@ -300,9 +366,10 @@
 
     end subroutine calculate_solid_energy_source
 
-    subroutine calculate_solid_absorbtion(state,TNew,t_absorb,solid_source)
+    subroutine calculate_solid_absorbtion(state,iphase,TNew,t_absorb,solid_source)
 
-      type(state_type) :: state
+      type(state_type), dimension(:) :: state
+      integer, intent(in) :: iphase
       real, dimension(:) ::  tnew,t_absorb
       type(scalar_field_pointer) :: solid_source
 
@@ -310,24 +377,28 @@
            T, epsilon, solid_pressure,absorb_out
       real :: CoefficientOfRestitution, d0
       character(len=OPTION_PATH_LEN) :: option_path
+      integer :: stat
 
 
       allocate(solid_source%ptr)
 
-      distribution_function=>extract_scalar_field(state,"RadialDistributionFunction")
-      density=>extract_scalar_field(state,"Density")
-      T=>extract_scalar_field(state,"Temperature")
-      epsilon=>extract_scalar_field(state,"PhaseVolumeFraction")
-      solid_pressure=>extract_scalar_field(state,"SolidPhasePressure")
+      distribution_function=>extract_scalar_field(state(iphase),"RadialDistributionFunction")
+      density=>extract_scalar_field(state(iphase),"Density")
+      T=>extract_scalar_field(state(iphase),"Temperature",stat)
+      if (stat/=0) then
+         T=>extract_scalar_field(state(1),"Temperature")
+      end if
+      epsilon=>extract_scalar_field(state(iphase),"PhaseVolumeFraction")
+      solid_pressure=>extract_scalar_field(state(iphase),"SolidPhasePressure")
 
       call allocate(solid_source%ptr,T%mesh,"SourceWithDivU")
       call zero(solid_source%ptr)
 
       T%val=TNew
 
-      call get_option(trim(state%option_path)//'/multiphase_properties/coefficient_of_restitution',&
+      call get_option(trim(state(iphase)%option_path)//'/multiphase_properties/coefficient_of_restitution',&
                  CoefficientOfRestitution,default=DEFAULT_E)
-      option_path=trim(state%option_path)//'/multiphase_properties/drag/diameter'
+      option_path=trim(state(iphase)%option_path)//'/multiphase_properties/drag/diameter'
             call get_option(trim(option_path),d0,default=0.001)
 
       t_absorb=2.0*(1.0-CoefficientOfRestitution**2)*abs(epsilon%val*density%val*distribution_function%val)*&
@@ -335,11 +406,10 @@
          ! misssing a div u term here!
 !                    + 2.0*drag_coeff
       
-      if (has_scalar_field(state,"TemperatureAbsorption")) then
-         absorb_out=>extract_scalar_field(state,"TemperatureAbsorption")
+      if (has_scalar_field(state(iphase),"TemperatureAbsorption")) then
+         absorb_out=>extract_scalar_field(state(iphase),"TemperatureAbsorption")
          absorb_out%val(:)=t_absorb
       end if
-
 
       solid_source%ptr%val=-2.0*(1.0-CoefficientOfRestitution**2)*epsilon%val*density%val*distribution_function%val*T%val+solid_pressure%val
 
@@ -360,10 +430,14 @@
       
       type(mesh_type), pointer :: mat_mesh
 
+      integer ::stat
 
       distribution_function=>extract_scalar_field(state(phase),"RadialDistributionFunction")
       density=>extract_scalar_field(state(phase),"Density")
-      T=>extract_scalar_field(state(phase),"Temperature")
+      T=>extract_scalar_field(state(phase),"Temperature",stat)
+      if (stat/=0) then
+         T=>extract_scalar_field(state(1),"Temperature")
+      end if
       epsilon=>extract_scalar_field(state(phase),"PhaseVolumeFraction")
 
       mat_mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
@@ -399,6 +473,13 @@
       REAL, DIMENSION( NCOLCT * NDIM * NPHASE ), intent( in ) :: CT
 
     end subroutine set_div_u
+
+
+    subroutine initialize_gradient_flow(state)
+
+      type (state_type) :: state
+
+    end subroutine initialize_gradient_flow
              
   end module granular_flow
                

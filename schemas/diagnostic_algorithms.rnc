@@ -1253,6 +1253,43 @@ particle_reynolds_number_algorithm =
 
 # Misc
 
+inverse_mesh_length_scalar =
+			   (
+      ## Local element inverse characteristic length. At each node, this takes the maximum value of the spectral norms of the local inverse Jacobian tensors in the relevant elements
+      element algorithm {
+        attribute name { "inverse_mesh_length_scalar" },
+        attribute material_phase_support { "single" }
+      }
+   )
+
+wave_speed_cfl =
+			   (
+      ## Calculate CFL number from a scalar wave speed
+      element algorithm {
+        attribute name { "wave_speed_cfl" },
+        attribute material_phase_support { "multiple" },
+	scalar_source_field
+      }
+   )
+
+solid_wave_speed =
+			   (
+      ## calculate the acoustic wave speed from a solid phase pressure
+      element algorithm {
+        attribute name { "solid_wave_speed" },
+        attribute material_phase_support { "single" }
+      }
+   )
+
+inverse_mesh_length_tensor =
+			   (
+			    element algorithm {	
+      ## Local element inverse Jacobian transformation tensor
+        attribute name { "inverse_mesh_length_tensor" },
+        attribute material_phase_support { "single" }
+      }	
+      )	
+
 # l2norm diagnostic algorithm
 l2norm_algorithm =
    (
@@ -1368,12 +1405,14 @@ vector_scalar_time_averaged_algorithm =
       }
    )
 
-scalar_diagnostic_algorithms = universal_numbering_diagnostic_algorithm
+scalar_diagnostic_algorithms = wave_speed_cfl
+scalar_diagnostic_algorithms |= universal_numbering_diagnostic_algorithm	
 scalar_diagnostic_algorithms |= universal_column_id_algorithm
 scalar_diagnostic_algorithms |= tidal_harmonic_algorithm
 scalar_diagnostic_algorithms |= tensor_second_invariant_algorithm
 scalar_diagnostic_algorithms |= temporalmin_algorithm
 scalar_diagnostic_algorithms |= temporalmax_algorithm
+scalar_diagnostic_algorithms |= solid_wave_speed
 scalar_diagnostic_algorithms |= scalar_time_averaged_algorithm
 scalar_diagnostic_algorithms |= scalar_sum_algorithm
 scalar_diagnostic_algorithms |= scalar_squared_time_averaged_algorithm
@@ -1388,6 +1427,7 @@ scalar_diagnostic_algorithms |= particle_reynolds_number_algorithm
 scalar_diagnostic_algorithms |= node_halo_diagnostic_algorithm
 scalar_diagnostic_algorithms |= lumped_mass_smoothed_scalar_algorithm
 scalar_diagnostic_algorithms |= l2norm_algorithm
+scalar_diagnostic_algorithms |= inverse_mesh_length_scalar
 scalar_diagnostic_algorithms |= helmholtz_smoothed_scalar_algorithm
 scalar_diagnostic_algorithms |= helmholtz_anisotropic_smoothed_scalar_algorithm
 scalar_diagnostic_algorithms |= grad_normal_algorithm
@@ -1425,6 +1465,7 @@ vector_diagnostic_algorithms |= vector_python_diagnostic_algorithm
 tensor_diagnostic_algorithms = vector_squared_time_averaged_algorithm
 tensor_diagnostic_algorithms |= tensor_copy_algorithm
 tensor_diagnostic_algorithms |= strain_rate_algorithm
+tensor_diagnostic_algorithms |= inverse_mesh_length_tensor
 tensor_diagnostic_algorithms |= hessian_algorithm
 tensor_diagnostic_algorithms |= helmholtz_anisotropic_smoothed_tensor_algorithm
 tensor_diagnostic_algorithms |= field_tolerance_algorithm

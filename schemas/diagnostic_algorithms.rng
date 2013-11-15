@@ -1703,6 +1703,51 @@ and also the Density and Viscosity fields of the continuous phase.</a:documentat
     </element>
   </define>
   <!-- Misc -->
+  <define name="inverse_mesh_length_scalar">
+    <element name="algorithm">
+      <a:documentation>Local element inverse characteristic length. At each node, this takes the maximum value of the spectral norms of the local inverse Jacobian tensors in the relevant elements</a:documentation>
+      <attribute name="name">
+        <value>inverse_mesh_length_scalar</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+    </element>
+  </define>
+  <define name="wave_speed_cfl">
+    <element name="algorithm">
+      <a:documentation>Calculate CFL number from a scalar wave speed</a:documentation>
+      <attribute name="name">
+        <value>wave_speed_cfl</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>multiple</value>
+      </attribute>
+      <ref name="scalar_source_field"/>
+    </element>
+  </define>
+  <define name="solid_wave_speed">
+    <element name="algorithm">
+      <a:documentation>calculate the acoustic wave speed from a solid phase pressure</a:documentation>
+      <attribute name="name">
+        <value>solid_wave_speed</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+    </element>
+  </define>
+  <define name="inverse_mesh_length_tensor">
+    <element name="algorithm">
+      <attribute name="name">
+        <a:documentation>Local element inverse Jacobian transformation tensor</a:documentation>
+        <value>inverse_mesh_length_tensor</value>
+      </attribute>
+      <attribute name="material_phase_support">
+        <value>single</value>
+      </attribute>
+    </element>
+  </define>
   <!-- l2norm diagnostic algorithm -->
   <define name="l2norm_algorithm">
     <element name="algorithm">
@@ -1842,6 +1887,9 @@ This field needs to be interpolated between adapts.</a:documentation>
     </element>
   </define>
   <define name="scalar_diagnostic_algorithms">
+    <ref name="wave_speed_cfl"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="universal_numbering_diagnostic_algorithm"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
@@ -1858,6 +1906,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="temporalmax_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="solid_wave_speed"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="scalar_time_averaged_algorithm"/>
@@ -1900,6 +1951,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="l2norm_algorithm"/>
+  </define>
+  <define name="scalar_diagnostic_algorithms" combine="choice">
+    <ref name="inverse_mesh_length_scalar"/>
   </define>
   <define name="scalar_diagnostic_algorithms" combine="choice">
     <ref name="helmholtz_smoothed_scalar_algorithm"/>
@@ -2005,6 +2059,9 @@ This field needs to be interpolated between adapts.</a:documentation>
   </define>
   <define name="tensor_diagnostic_algorithms" combine="choice">
     <ref name="strain_rate_algorithm"/>
+  </define>
+  <define name="tensor_diagnostic_algorithms" combine="choice">
+    <ref name="inverse_mesh_length_tensor"/>
   </define>
   <define name="tensor_diagnostic_algorithms" combine="choice">
     <ref name="hessian_algorithm"/>

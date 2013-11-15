@@ -207,7 +207,7 @@
       do iphase=1,nphase
          if (has_scalar_field(state(iphase),"RadialDistributionFunction")) then
             t_absorb(:,:,iphase)=0.0
-            call calculate_solid_absorbtion(state(nphase),t(CV_NONODS*(iphase-1)+1:CV_NONODS*iphase),t_absorb(:,iphase,iphase),solid_source(iphase))
+            call calculate_solid_absorbtion(state,iphase,t(CV_NONODS*(iphase-1)+1:CV_NONODS*iphase),t_absorb(:,iphase,iphase),solid_source(iphase))
             call calculate_solid_energy_source(state,iphase,t_absorb(:,iphase,iphase),t_source(CV_NONODS*(iphase-1)+1:CV_NONODS*iphase))
             tdiffusion(:,:,:,iphase)=0.0
             call calculate_solid_diffusion(state,nphase,tdiffusion(:,:,:,iphase))
@@ -218,6 +218,12 @@
 
       lump_eqns = have_option( '/material_phase[0]/scalar_field::PhaseVolumeFraction/prognostic/' // &
            'spatial_discretisation/continuous_galerkin/mass_terms/lump_mass_matrix' )
+      if  ((.not. lump_eqns ) .and. trim( option_path ) == '/material_phase[0]/scalar_field::Temperature' ) then
+         if (option_count('/material_phase/scalar_field::Temperature')==1) then
+            lump_eqns=.true.
+            print*, "lump energy eqns"
+         end if
+      end if
 
       Loop_NonLinearFlux: DO ITS_FLUX_LIM = 1, NITS_FLUX_LIM
 
@@ -295,7 +301,7 @@
 
          Conditional_Lumping: IF(LUMP_EQNS) THEN
             ! Lump the multi-phase flow eqns together
-            ALLOCATE( CV_RHS_SUB( CV_NONODS ))
+            if (.not. allocated(CV_RHS_SUB)) ALLOCATE( CV_RHS_SUB( CV_NONODS ))
 
             CV_RHS_SUB = 0.0
             DO IPHASE = 1, NPHASE
@@ -303,18 +309,22 @@
                     IPHASE * CV_NONODS )
             END DO
 
-            NCOLACV_SUB = FINACV( CV_NONODS + 1) - 1 - CV_NONODS *( NPHASE - 1 )
+            NCOLACV_SUB = FINACV( CV_NONODS + 1) - 1
 
-            ALLOCATE( ACV_SUB( NCOLACV_SUB ))
-            ALLOCATE( COLACV_SUB( NCOLACV_SUB ))
-            ALLOCATE( FINACV_SUB( CV_NONODS + 1 ))
-            ALLOCATE( MIDACV_SUB( CV_NONODS ))
+            if (.not. allocated(ACV_SUB)) then
+
+               ALLOCATE( ACV_SUB( NCOLACV_SUB ))
+               ALLOCATE( COLACV_SUB( NCOLACV_SUB ))
+               ALLOCATE( FINACV_SUB( CV_NONODS + 1 ))
+               ALLOCATE( MIDACV_SUB( CV_NONODS ))
+
+            end if
 
             CALL LUMP_ENERGY_EQNS( CV_NONODS, NPHASE, &
                  NCOLACV, NCOLACV_SUB, &
-                 FINACV, COLACV, COLACV_SUB, FINACV_SUB, ACV_SUB )
+                 FINACV, COLACV, COLACV_SUB, FINACV_SUB, ACV_SUB,ACV)
 
-            CALL SOLVER( ACV_SUB, T, CV_RHS_SUB, &
+            CALL SOLVER( ACV_SUB, T(1:CV_NONODS), CV_RHS_SUB, &
                  FINACV_SUB, COLACV_SUB, &
                  trim(option_path))
 
@@ -5508,18 +5518,19 @@ end if
 
     SUBROUTINE LUMP_ENERGY_EQNS( CV_NONODS, NPHASE, &
          NCOLACV, NCOLACV_SUB, &
-         FINACV, COLACV, COLACV_SUB, FINACV_SUB, ACV_SUB )
+         FINACV, COLACV, COLACV_SUB, FINACV_SUB, ACV_SUB, ACV )
       implicit none
 
 
       INTEGER, intent( in ) :: CV_NONODS, NPHASE, NCOLACV, NCOLACV_SUB
       INTEGER, DIMENSION( CV_NONODS * NPHASE + 1 ), intent( in ) :: FINACV
       INTEGER, DIMENSION( NCOLACV ), intent( in ) :: COLACV
-      INTEGER, DIMENSION( CV_NONODS ), intent( inout ) :: COLACV_SUB
+      INTEGER, DIMENSION( NCOLACV_SUB ), intent( inout ) :: COLACV_SUB
       INTEGER, DIMENSION( CV_NONODS + 1 ), intent( inout ) :: FINACV_SUB
       REAL, DIMENSION( NCOLACV_SUB), intent( inout ) :: ACV_SUB
+      REAL, DIMENSION( NCOLACV), intent( in ) :: ACV
       ! Local Variables
-      INTEGER :: COUNT, COUNT2, CV_NOD, ICOL, ICOL_PHA, CV_NOD_PHA
+      INTEGER :: COUNT, COUNT2, CV_NOD, ICOL, ICOL_PHA, CV_NOD_PHA, COUNTMAT
 
       ewrite(3,*) 'In LUMP_ENERGY_EQNS'
 
@@ -5540,13 +5551,21 @@ end if
 
       ACV_SUB = 0.
       DO CV_NOD_PHA = 1, CV_NONODS * NPHASE
-         DO COUNT = 1, FINACV( CV_NOD_PHA + 1 ) - 1
-            CV_NOD = MOD( CV_NOD_PHA, CV_NONODS )
+         CV_NOD = MOD( CV_NOD_PHA-1, CV_NONODS )+1
+         DO COUNT = FINACV( CV_NOD_PHA ), FINACV( CV_NOD_PHA + 1 ) - 1
             ICOL_PHA = COLACV( COUNT ) 
-            ICOL = MOD ( ICOL_PHA, CV_NONODS )
+            ICOL = MOD ( ICOL_PHA-1, CV_NONODS )+1
 
+!            CALL POSINMAT( COUNTMAT, CV_NOD_PHA, ICOL_PHA, &
+!                 CV_NONODS * NPHASE, FINACV, COLACV, NCOLACV)
             CALL POSINMAT( COUNT2, CV_NOD, ICOL, &
                  CV_NONODS, FINACV_SUB, COLACV_SUB, NCOLACV_SUB )
+
+!            print*, count,count2,countmat
+!            print*, NCOLACV, NCOLACV_SUB
+
+            ACV_SUB(count2)=ACV_SUB(count2)+ACV(COUNT)
+            
 
          END DO
       END DO

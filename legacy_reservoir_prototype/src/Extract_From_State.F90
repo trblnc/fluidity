@@ -777,6 +777,8 @@
       logical :: is_overlapping, is_isotropic, is_diagonal, is_symmetric, have_gravity
       real, dimension( :, : ), allocatable :: constant
 
+      integer :: temp_phase, temp_count
+
 !!$ Extracting spatial resolution
       call Get_Primary_Scalars( state, &         
            nphase, nstate, ncomp, totele, ndim, stotel, &
@@ -889,6 +891,11 @@
 !!$
 !!$ Extracting Temperature Field:
 !!$
+
+      temp_count=option_count('/material_phase/scalar_field::Temperature')
+
+      if (temp_count==nphase) then
+
       do iphase = 1, nphase
          Conditional_Temperature: if( have_option( '/material_phase[' // int2str( iphase - 1 ) // &
               ']/scalar_field::Temperature' ) ) then
@@ -901,6 +908,31 @@
                  suf_bc_rob1 = suf_t_bc_rob1, suf_bc_rob2 = suf_t_bc_rob2 )
          end if Conditional_Temperature
       end do
+
+   else if (temp_count==1) then
+
+      do iphase = 1, nphase
+        if( have_option(trim(state(iphase)%option_path)//'/scalar_field::Temperature' ) ) then
+            scalarfield => extract_scalar_field( state(iphase), 'Temperature' )
+            temp_phase=iphase
+            exit
+         end if 
+      end do
+
+      temp_phase=iphase
+
+      do iphase = 1, nphase
+         knod = ( iphase - 1 ) * node_count( scalarfield )
+         call Get_ScalarFields_Outof_State( state, initialised,temp_phase, scalarfield, &
+              Temperature( knod + 1 : knod + node_count( scalarfield ) ), &
+              Temperature_BC_Spatial, Temperature_BC, &
+              field_prot_source = Temperature_Source( knod + 1 : knod + node_count( scalarfield ) ), &
+              suf_bc_rob1 = suf_t_bc_rob1, suf_bc_rob2 = suf_t_bc_rob2 )
+      end do
+
+   end if
+
+         
 
 !!$
 !!$ Extracting Porosity field (assuming for now that porosity is constant
@@ -1936,9 +1968,12 @@
       do iphase = 1, nphase
 
          field_name = 'Temperature'
-         field => extract_scalar_field( state( iphase ), trim( field_name ) )
+         field => extract_scalar_field( state( iphase ), trim( field_name ) ,stat)
+         if (stat/=0) then
+            field => extract_scalar_field( state( 1 ), trim( field_name ))
+         end if
 
-         option_path = '/material_phase['//int2str( iphase - 1 )//']/scalar_field::'//trim( field_name )
+         option_path = trim(field%option_path)
          option_path2 = trim( option_path ) // '/prognostic/boundary_conditions['
 
          nobcs = get_boundary_condition_count( field )

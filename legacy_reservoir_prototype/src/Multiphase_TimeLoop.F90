@@ -37,7 +37,7 @@
          check_diagnostic_dependencies
     use global_parameters, only: timestep, simulation_start_time, simulation_start_cpu_time, &
                                simulation_start_wall_time, &
-                               topology_mesh_name, current_time
+                               topology_mesh_name, current_time, FIELD_NAME_LEN
     use fldebug
     use state_module
     use fields
@@ -194,6 +194,7 @@
 
       type( scalar_field ), pointer :: cfl
       real :: c, rc, minc, maxc, ic
+      character(len=Field_NAME_LEN) :: cfl_name
 
 !!$ Compute primary scalars used in most of the code
       call Get_Primary_Scalars( state, &         
@@ -643,8 +644,10 @@
 
 !!$ Update state memory
                do iphase = 1, nphase
-                  Temperature_State => extract_scalar_field( state( iphase ), 'Temperature' )
-                  Temperature_State % val = Temperature( 1 + ( iphase - 1 ) * cv_nonods : iphase * cv_nonods )
+                  if (has_scalar_field(state( iphase ), 'Temperature')) then
+                     Temperature_State => extract_scalar_field( state( iphase ), 'Temperature' )
+                     Temperature_State % val = Temperature( 1 + ( iphase - 1 ) * cv_nonods : iphase * cv_nonods )
+                  end if
                end do
 
                call Calculate_All_Rhos( state, ncomp, nphase, cv_nonods, Component, &
@@ -653,6 +656,7 @@
             end if Conditional_ScalarAdvectionField
 
             ScalarField_Source_Store = ScalarField_Source + ScalarField_Source_Component
+
 
             volfra_use_theta_flux = .true.
             if( ncomp <= 1 ) volfra_use_theta_flux = .false.
@@ -1483,8 +1487,13 @@
             call get_option( '/timestepping/adaptive_timestep/increase_tolerance', ic, stat )
 
             do iphase = 1, nphase
-               cfl => extract_scalar_field( state( iphase), 'CFLNumber' )
-               c = max ( c, maxval( cfl % val ) )
+               do I=1,option_count('/timestepping/adaptive_timestep/courant_number')
+                  
+                  call get_option( '/timestepping/adaptive_timestep/courant_number['//int2str(i-1)//']/name',&
+                       cfl_name)
+                  cfl => extract_scalar_field( state( iphase), trim(cfl_name),stat)
+                  if (stat==0)  c = max ( c, maxval( cfl % val ) )
+               end do
             end do
             call get_option( '/timestepping/timestep', dt )
             dt = max( min( min( dt * rc / c, ic * dt ), maxc ), minc )

@@ -570,19 +570,36 @@ to sum to 1 by adding constraint into compositional source term.</a:documentatio
               <attribute name="name">
                 <value>RadialDistributionFunction</value>
               </attribute>
-              <element name="diagnostic">
-                <ref name="pressure_mesh_choice"/>
-                <ref name="internal_algorithm"/>
-              </element>
-              <element name="function">
-                <attribute name="name">
-                  <value>Gidaspow</value>
-                </attribute>
-              </element>
-              <element name="maximum_phase_volume_fraction">
-                <ref name="real"/>
-              </element>
-              <ref name="field_output_options"/>
+              <choice>
+                <element name="diagnostic">
+                  <ref name="pressure_mesh_choice"/>
+                  <ref name="internal_algorithm"/>
+                  <choice>
+                    <element name="function">
+                      <attribute name="name">
+                        <value>Gidaspow</value>
+                      </attribute>
+                    </element>
+                    <element name="function">
+                      <attribute name="name">
+                        <value>BulkGidaspow</value>
+                      </attribute>
+                    </element>
+                  </choice>
+                  <element name="maximum_phase_volume_fraction">
+                    <ref name="real"/>
+                  </element>
+                  <ref name="field_output_options"/>
+                </element>
+                <element name="aliased">
+                  <attribute name="material_phase_name">
+                    <data type="string"/>
+                  </attribute>
+                  <attribute name="field_name">
+                    <value>RadialDistributionFunction</value>
+                  </attribute>
+                </element>
+              </choice>
             </element>
           </optional>
           <optional>
@@ -865,8 +882,41 @@ Default value 2.0</a:documentation>
                 </choice>
               </optional>
               <optional>
+                <element name="polydispersive_drag">
+                  <a:documentation>apply fluidic drag to polydispersed phase interactions</a:documentation>
+                  <element name="lubrication_distace">
+                    <ref name="real"/>
+                  </element>
+                  <ref name="comment"/>
+                </element>
+              </optional>
+              <optional>
+                <element name="solid_solid_interactions">
+                  <a:documentation>Apply additional solid-solid interactions in polydispersed solid-fluid flow</a:documentation>
+                  <optional>
+                    <element name="closure">
+                      <a:documentation>Turns on Syamlal (1987) closure 	 	  			 </a:documentation>
+                      <attribute name="name">
+                        <value>Syamlal</value>
+                      </attribute>
+                      <element name="coefficient_of_friction">
+                        <ref name="real"/>
+                      </element>
+                      <element name="radial_distribution_function">
+                        <attribute name="name">
+                          <value>Lebowitz</value>
+                        </attribute>
+                        <ref name="comment"/>
+                      </element>
+                      <ref name="comment"/>
+                    </element>
+                  </optional>
+                  <ref name="comment"/>
+                </element>
+              </optional>
+              <optional>
                 <element name="capillary_pressure">
-                  <a:documentation>Option for capillary pressure</a:documentation>
+                  <a:documentation>Option for capillary pressure				 </a:documentation>
                   <element name="type_Brookes_Corey">
                     <a:documentation>Brookes-Corey equation
 
@@ -4153,28 +4203,35 @@ the NVD diagram upper bound.</a:documentation>
     </choice>
   </define>
   <define name="timestep_cfl_number_options">
-    <choice>
-      <element name="courant_number">
-        <a:documentation>Select the Courant Number definition to be used for adaptive timestepping.
+    <oneOrMore>
+      <choice>
+        <element name="courant_number">
+          <a:documentation>Select the Courant Number definition to be used for adaptive timestepping.
 This uses the finite element approximation of the CFL Number.</a:documentation>
-        <attribute name="name">
-          <value>CFLNumber</value>
-        </attribute>
-        <ref name="velocity_mesh_choice">
-          <a:documentation>Select the mesh on which you wish to evaluate the CFLNumber.</a:documentation>
-        </ref>
-      </element>
-      <element name="courant_number">
-        <a:documentation>Select the Courant Number definition to be used for adaptive timestepping.
+          <attribute name="name">
+            <value>CFLNumber</value>
+          </attribute>
+          <ref name="velocity_mesh_choice">
+            <a:documentation>Select the mesh on which you wish to evaluate the CFLNumber.</a:documentation>
+          </ref>
+        </element>
+        <element name="courant_number">
+          <a:documentation>Select the Courant Number definition to be used for adaptive timestepping.
 This uses the control volume definition of the CFL Number.</a:documentation>
-        <attribute name="name">
-          <value>ControlVolumeCFLNumber</value>
-        </attribute>
-        <ref name="velocity_mesh_choice">
-          <a:documentation>Select the mesh on which you wish to evaluate the ControlVolumeCFLNumber.</a:documentation>
-        </ref>
-      </element>
-    </choice>
+          <attribute name="name">
+            <value>ControlVolumeCFLNumber</value>
+          </attribute>
+          <ref name="velocity_mesh_choice">
+            <a:documentation>Select the mesh on which you wish to evaluate the ControlVolumeCFLNumber.</a:documentation>
+          </ref>
+        </element>
+        <element name="courant_number">
+          <attribute name="name">
+            <data type="string" datatypeLibrary=""/>
+          </attribute>
+        </element>
+      </choice>
+    </oneOrMore>
   </define>
   <define name="mixing_stats">
     <element name="include_mixing_stats">

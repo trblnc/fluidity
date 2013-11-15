@@ -468,16 +468,27 @@ start =
                )               
             }?,
 	    element scalar_field {
-	            attribute name { "RadialDistributionFunction" },
-		    element diagnostic {
-		          pressure_mesh_choice,	
-			  internal_algorithm
-			  }, 
-	    	    element function{
-		    	    attribute name { "Gidaspow" }
-			    },
-		    element maximum_phase_volume_fraction { real },
-		    field_output_options
+	       attribute name { "RadialDistributionFunction" },
+	       (
+		   element diagnostic {
+		      pressure_mesh_choice,	
+		      internal_algorithm,
+		   ( 
+	    	      element function{
+		    	 attribute name { "Gidaspow" }
+		      }|
+		      element function{
+		      attribute name { "BulkGidaspow" }
+			    	  }
+		   ),
+		      element maximum_phase_volume_fraction { real },
+		      field_output_options
+		      }|
+		    element aliased {
+                     attribute material_phase_name { xsd:string },
+                     attribute field_name {"RadialDistributionFunction" }
+                  }
+                )
 	    }?,
             ## Scale the momentum equation by the volume fraction for when some problems are not well poised.
             element scale_momentum_by_volume_fraction {empty}?,
@@ -646,8 +657,26 @@ start =
 	    		}+,
 			comment
 			}
-	       )?, 			 
-               ## Option for capillary pressure
+	       )?,
+	       ## apply fluidic drag to polydispersed phase interactions
+	       element polydispersive_drag {
+	       	  element lubrication_distace {real} ,
+		  comment
+	       }?,
+	       ## Apply additional solid-solid interactions in polydispersed solid-fluid flow
+	       element solid_solid_interactions {
+	            ## Turns on Syamlal (1987) closure 	 	  			 
+	            element closure {
+		        attribute name {"Syamlal"},
+		        element coefficient_of_friction {real},
+			element radial_distribution_function {
+			     attribute name {"Lebowitz"},
+			     comment
+			},	
+		    	comment}?,
+		    comment
+	       }?,      
+               ## Option for capillary pressure				 
                element capillary_pressure {
                   ## Brookes-Corey equation
                   ##
@@ -3354,8 +3383,11 @@ timestep_cfl_number_options =
             attribute name { "ControlVolumeCFLNumber" },
               ## Select the mesh on which you wish to evaluate the ControlVolumeCFLNumber.
               velocity_mesh_choice
+         }|
+	 element courant_number {
+            attribute name { string }
          }
-      )
+      )+
    )
 
 mixing_stats =

@@ -33,7 +33,7 @@
     use state_module
     use fields
     use state_module
-    use global_parameters, only: OPTION_PATH_LEN, PYTHON_FUNC_LEN
+    use global_parameters, only: OPTION_PATH_LEN, PYTHON_FUNC_LEN, PI
     use spud
     use futils, only: int2str
     use vector_tools
@@ -73,6 +73,22 @@
        integer :: type
        type(function_data) ::python_data
     end type drag_option_type
+
+    type polydispersive_drag_option_type
+       real :: lubrication_distance
+    end type polydispersive_drag_option_type
+
+    type solid_solid_interaction_phase_option_type
+       integer :: type
+       real :: coefficient_of_friction
+       integer :: radial_distribution_function
+    end type solid_solid_interaction_phase_option_type
+
+    
+    type solid_solid_interaction_option_type
+       type(solid_solid_interaction_phase_option_type),&
+            dimension(:), allocatable :: list
+    end type solid_solid_interaction_option_type
 
   contains
 
@@ -607,14 +623,17 @@
       integer :: nphase, nstate, ncomp, totele, ndim, stotel, &
            u_nloc, xu_nloc, cv_nloc, x_nloc, x_nloc_p1, p_nloc, mat_nloc, x_snloc, cv_snloc, u_snloc, &
            p_snloc, cv_nonods, mat_nonods, u_nonods, xu_nonods, x_nonods, x_nonods_p1, p_nonods, &
-           ele, imat, icv, iphase, cv_iloc, idim, jdim, ij,i
+           ele, imat, icv, iphase, jphase, cv_iloc, idim, jdim, ij,i
       real :: Mobility, pert
       real, dimension( :, :, : ), allocatable :: u_absorb2
       real, dimension( : ), allocatable :: satura2
 
       logical, dimension(size(state)) :: drag_term
+      logical, dimension(size(state),size(state)) :: dispersed_drag_term, solid_solid_interaction 
       integer :: continuous_phase
       type(drag_option_type), dimension(size(state)) :: drag_options
+      type(polydispersive_drag_option_type), dimension(size(state)) :: polydispersive_drag_options
+      type(solid_solid_interaction_option_type), dimension(size(state)) :: solid_solid_interaction_options
       type(block_csr_matrix) :: drag_abs_matrix
 
 !!$ Obtaining a few scalars that will be used in the current subroutine tree:
@@ -655,6 +674,9 @@
 
       continuous_phase=1
       drag_term=.false.
+      dispersed_drag_term=.false.
+      solid_solid_interaction=.false.
+
       do IPHASE = 1, NPHASE
          if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
            '/multiphase_properties/continuous_phase' ) ) continuous_phase=IPHASE
@@ -663,7 +685,49 @@
             call get_drag_options(iphase,state, drag_options(iphase))
             drag_term(iphase)=.true.
          end if
+         if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
+           '/multiphase_properties/polydispersive_drag' ) ) then
+            call get_polydispersive_drag_options(iphase,state, polydispersive_drag_options(iphase))
+            dispersed_drag_term(iphase,iphase)=.true.
+            
+         end if
+         if( have_option( '/material_phase['//int2str(IPHASE-1)//']/' // &
+           '/multiphase_properties/solid_solid_interaction' ) ) then
+            call get_solid_solid_interaction_options(iphase,state, solid_solid_interaction_options(iphase))
+            solid_solid_interaction(iphase,iphase)=.true.
+         end if
       end do
+
+      if (any(dispersed_drag_term)) then
+         do IPHASE = 1, NPHASE
+            if ( .not.  dispersed_drag_term(iphase,iphase)) then
+               cycle
+            else
+               do jphase = iphase+1, NPHASE
+                  if(dispersed_drag_term(jphase,jphase)) then
+                     dispersed_drag_term(iphase,jphase)=.true.
+                     dispersed_drag_term(jphase,iphase)=.true.
+                  end if
+               end do
+            end if
+         end do
+      end if
+
+      if (any(solid_solid_interaction)) then
+         do IPHASE = 1, NPHASE
+            if ( .not. solid_solid_interaction(iphase,iphase)) then
+               cycle
+            else
+               do jphase = iphase+1, NPHASE
+                  if(solid_solid_interaction(jphase,jphase)) then
+                     solid_solid_interaction(iphase,jphase)=.true.
+                     solid_solid_interaction(jphase,iphase)=.true.
+                  end if
+               end do
+            end if
+         end do
+      end if
+            
 
       if (any(drag_term)) then
          call initialize_drag_matrix(drag_abs_matrix,state(continuous_phase),nphase)
@@ -671,6 +735,19 @@
             if (drag_term(iphase)) then
                call add_drag_term(state,drag_abs_matrix,iphase,continuous_phase,drag_options(iphase))
             end if
+            do jphase = iphase+1, NPHASE
+               if(dispersed_drag_term(iphase,jphase)) then
+                  call add_polydispersive_drag_term(state,drag_abs_matrix,iphase,jphase,&
+                       drag_options(iphase),drag_options(jphase),&
+                       polydispersive_drag_options(iphase),polydispersive_drag_options(jphase))
+               end if
+               if(solid_solid_interaction(iphase,jphase)) then
+                  call add_solid_solid_interaction_term(state,drag_abs_matrix,continuous_phase,iphase,jphase,&
+                       drag_options(iphase),drag_options(jphase),&
+                       solid_solid_interaction_options(iphase),&
+                       solid_solid_interaction_options(jphase))
+               end if
+            end do
          end do
          call add_drag_to_old_style_matrix_and_cleanup(drag_abs_matrix,U_ABSORB,state(continuous_phase),&
               MAT_NONODS, CV_NONODS, NPHASE, NDIM, TOTELE, CV_NLOC, MAT_NLOC, &
@@ -904,6 +981,248 @@
     end subroutine add_drag_to_old_style_matrix_and_cleanup
       
 
+    function radial_distribution_function_Lebowitz(&
+         d_i,d_j,phi_c,phi_i,phi_j) result(g_ij)
+      real, intent(in) :: d_i,d_j
+      real, dimension(:), intent(in) :: phi_c,phi_i,phi_j
+      real, dimension(size(phi_i))  :: g_ij
+
+      g_ij=1.0/phi_c*(1.0+3.0*d_i*d_j/(phi_c*(d_i+d_j))&
+           *(phi_i/d_i+phi_j/d_j))
+
+    end function radial_distribution_function_Lebowitz
+
+    subroutine add_solid_solid_interaction_term(state,absorption,&
+         continuous_phase,&
+         iphase,jphase,&
+         iphase_drag_options,jphase_drag_options,&
+         iphase_solid_solid_interaction_options,&
+         jphase_solid_solid_interaction_options)
+      
+      type(state_type), dimension(:), intent(inout) :: state
+      type(block_csr_matrix), intent(inout) :: absorption
+      integer, intent(in) :: continuous_phase, iphase,jphase
+      type(drag_option_type), intent(in) :: iphase_drag_options, jphase_drag_options
+      type(solid_solid_interaction_option_type), intent(in) ::&
+           iphase_solid_solid_interaction_options,&
+           jphase_solid_solid_interaction_options
+
+
+      type(scalar_field) :: ibeta,jbeta,cval,cvf_dg,ivf_dg,jvf_dg
+      type(scalar_field), pointer :: cvf,ivf,jvf,rho_i,rho_j
+      type(mesh_type), pointer :: mesh
+      type(vector_field),pointer :: ivel,jvel
+      type(vector_field) :: deltaV
+      integer :: block1,block2,ele,idim,ndim,iopt,jopt,stat
+      integer, dimension(:), pointer :: dg_nodes, nodes
+      real :: d_i,d_j
+      real, dimension(:), allocatable :: r_i,r_j,g_ij
+
+
+      !! extract data from state 
+
+      mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
+      CVF=>extract_scalar_field(state(continuous_phase),&
+           "PhaseVolumeFraction",stat)
+      IVF=>extract_scalar_field(state(iphase),"PhaseVolumeFraction",stat)
+      JVF=>extract_scalar_field(state(jphase),"PhaseVolumeFraction",stat)
+      rho_i=>extract_scalar_field(state(jphase),"Density",stat)
+      rho_j=>extract_scalar_field(state(jphase),"Density",stat)
+      ivel=>extract_vector_field(state(iphase),"Velocity",stat)
+      jvel=>extract_vector_field(state(iphase),"Velocity",stat)
+
+
+      !! Useful convenience variables
+      
+      d_i=iphase_drag_options%diameter
+      d_j=jphase_drag_options%diameter
+
+      call allocate(cval,mesh,"working_array")
+      call allocate(CVF_DG,mesh,"IVF_DG")
+      call allocate(IVF_DG,mesh,"IVF_DG")
+      call allocate(JVF_DG,mesh,"JVF_DG")
+      call allocate(deltaV,mesh_dim(mesh),mesh,"deltaV")
+      call remap_field(CVF,CVF_DG)
+      call remap_field(IVF,IVF_DG)
+      call remap_field(JVF,JVF_DG)
+      call remap_field(ivel,deltaV)
+      call addto(deltaV,jvel, scale=-1.0)
+
+      call zero(cval)
+
+      allocate(r_i(ele_loc(rho_i,1)),&
+           r_j(ele_loc(rho_j,1)),&
+           g_ij(ele_loc(mesh,1)))
+            
+      do iopt=1, size(iphase_solid_solid_interaction_options%list)
+         do jopt=1, size(iphase_solid_solid_interaction_options%list)
+            if (iphase_solid_solid_interaction_options%list(iopt)%type/=&
+                jphase_solid_solid_interaction_options%list(jopt)%type) &
+                 cycle
+
+            do ele=1,ele_count(ibeta)
+               nodes=>ele_nodes(rho_i,ele)
+               dg_nodes=>ele_nodes(mesh,ele)
+               r_i=ele_val(rho_i,ele)
+               r_j=ele_val(rho_i,ele)
+               g_ij=radial_distribution_function_Lebowitz(d_i,d_j,&
+                    cvf_dg%val(dg_nodes),&
+                    ivf_dg%val(dg_nodes),&
+                    jvf_dg%val(dg_nodes))
+               cval%val(dg_nodes)= cval%val(dg_nodes)&
+                    +3.0*PI/4.0*(1.0+iphase_drag_options%coefficient)&
+                    *(1.0+iphase_solid_solid_interaction_options%list(iopt)%coefficient_of_friction*PI/4.0)&
+                    *r_i*r_j*g_ij*(d_i+d_j)**2/&
+                    (r_i*d_i**3+r_j*d_j**3)&
+                 *sqrt(sum(deltaV%val*deltaV%val(:,dg_nodes),dim=1))
+            end do
+         end do
+      end do
+
+      ndim=mesh_dim(mesh)
+
+      do IDIM=1,ndim
+         block1=(iphase-1)*ndim+IDIM
+         block2=(jphase-1)*ndim+IDIM
+         
+         do ele=1,ele_count(mesh)
+
+            dg_nodes=>ele_nodes(mesh,ele)
+
+            call addto_diag(absorption,block1,block1,dg_nodes, jvf_dg%val(dg_nodes)*cval%val(dg_nodes))
+            call addto_diag(absorption,block1,block2,dg_nodes, -jvf_dg%val(dg_nodes)*cval%val(dg_nodes))
+            call addto_diag(absorption,block2,block1,dg_nodes, -ivf_dg%val(dg_nodes)*cval%val(dg_nodes))
+            call addto_diag(absorption,block2,block2,dg_nodes, ivf_dg%val(dg_nodes)*cval%val(dg_nodes))
+
+         end do
+
+      end do
+
+      call deallocate(cval)
+      call deallocate(cvf_dg)
+      call deallocate(ivf_dg)
+      call deallocate(jvf_dg)
+      call deallocate(deltaV)
+      
+      deallocate(r_i,r_j,g_ij)
+      
+
+
+    end subroutine add_solid_solid_interaction_term
+
+    subroutine add_polydispersive_drag_term(state,absorption,iphase,jphase,&
+                       iphase_drag_options,jphase_drag_options,&
+                       iphase_polydispersive_drag_options,&
+                       jphase_polydispersive_drag_options)
+      
+      type(state_type), dimension(:), intent(inout) :: state
+      type(block_csr_matrix), intent(inout) :: absorption
+      integer, intent(in) :: iphase,jphase
+      type(drag_option_type), intent(in) :: iphase_drag_options, jphase_drag_options
+      type(polydispersive_drag_option_type), intent(in) ::&
+           iphase_polydispersive_drag_options,jphase_polydispersive_drag_options
+
+      type(scalar_field) :: ibeta,jbeta,cval,ivf_dg,jvf_dg
+      type(scalar_field), pointer :: ivf,jvf
+      type(mesh_type), pointer :: mesh
+
+      real :: alpha
+      integer :: block1,block2, ele,idim,ndim,stat
+      integer, dimension(:), pointer :: dg_nodes
+
+      mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
+      IVF=>extract_scalar_field(state(iphase),"PhaseVolumeFraction",stat)
+      JVF=>extract_scalar_field(state(jphase),"PhaseVolumeFraction",stat)
+
+      call allocate(ibeta,mesh,"Drag_coefficient_iphase")
+      call allocate(jbeta,mesh,"Drag_coefficient_jphase")
+      call allocate(cval,mesh,"working_array")
+      call allocate(IVF_DG,mesh,"IVF_DG")
+      call allocate(JVF_DG,mesh,"JVF_DG")
+      call remap_field(IVF,IVF_DG)
+      call remap_field(JVF,JVF_DG)
+
+      alpha=1.313*log10(min(iphase_drag_options%diameter, jphase_drag_options%diameter)/&
+           max(iphase_polydispersive_drag_options%lubrication_distance,&
+           jphase_polydispersive_drag_options%lubrication_distance))-1.249
+
+
+      cval%val=(ivf_dg%val/ibeta%val+jvf_dg%val/jbeta%val)
+
+      call calculate_drag_as_scalar(state, ibeta,iphase,jphase,&
+           iphase_drag_options,ivf_dg,jvf_dg)
+      call calculate_drag_as_scalar(state, jbeta,jphase,iphase,&
+           jphase_drag_options,ivf_dg,jvf_dg)
+
+
+      ndim=mesh_dim(mesh)
+      do IDIM=1,ndim
+         block1=(iphase-1)*ndim+IDIM
+         block2=(jphase-1)*ndim+IDIM
+
+         do ele=1,ele_count(ibeta)
+
+            dg_nodes=>ele_nodes(mesh,ele)
+            call addto_diag(absorption,block1,block1,dg_nodes, 2*alpha*jvf_dg%val(dg_nodes)/cval%val(dg_nodes))
+            call addto_diag(absorption,block1,block2,dg_nodes, -2*alpha*jvf_dg%val(dg_nodes)/cval%val(dg_nodes))
+            call addto_diag(absorption,block2,block1,dg_nodes, -2*alpha*ivf_dg%val(dg_nodes)/cval%val(dg_nodes))
+            call addto_diag(absorption,block2,block2,dg_nodes, 2*alpha*ivf_dg%val(dg_nodes)/cval%val(dg_nodes))
+
+         end do
+
+      end do
+
+      call deallocate(ibeta)
+      call deallocate(jbeta)
+      call deallocate(cval)
+      call deallocate(ivf)
+      call deallocate(jvf)
+
+    end subroutine add_polydispersive_drag_term
+
+
+    subroutine calculate_drag_as_scalar(state, beta,iphase,jphase,&
+         drag_options,ivf_dg,jvf_dg)
+      type(state_type), dimension(:), intent(inout) :: state
+      type(scalar_field) :: beta
+      integer :: iphase, jphase
+      type(drag_option_type) :: drag_options
+      type(scalar_field) :: ivf_dg,jvf_dg
+      
+      type(vector_field), pointer :: ivel, jvel
+      type(vector_field) :: deltaV
+      
+      call zero(beta)
+      call allocate(deltaV,mesh_dim(beta%mesh),beta%mesh,"Veldifference")
+
+      select case(drag_options%type)
+      case(0)
+         call calculate_function_at_nodes(drag_options%python_data,beta)
+      case(1)
+         beta%val=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)*ivf_dg%val
+      case(-1)
+         beta%val=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)*ivf_dg%val*jvf_dg%val
+      case(2)
+         call remap_field(ivel,deltaV)
+         call addto(deltaV,jvel, scale=-1.0)
+         beta%val=3.0d0*drag_options%coefficient/(4.0d0*drag_options%diameter)*ivf_dg%val&
+              *sqrt(sum(deltaV%val(:,:)*deltaV%val(:,:),dim=1))
+
+
+      case(3)
+
+         !beta%val=merge(0.44,24.0/Re_s%val&
+         !     *(1.0d0+0.15*(Re_S%val)**0.687)&
+         !     ,Re_s%val>1000.0)
+
+      end select
+
+      call deallocate(deltaV)
+      
+
+    end subroutine calculate_drag_as_scalar
+      
+
     subroutine add_drag_term(state,absorption,dispersed_phase,continuous_phase,drag_options)
       type(state_type), dimension(:), intent(inout) :: state
       type(block_csr_matrix), intent(inout) :: absorption
@@ -925,12 +1244,12 @@
       continuous_velocity=>extract_vector_field(state(continuous_phase),"Velocity",stat)
 
       
-      mesh=>extract_mesh(state(1),"PressureMesh_Continuous")
+!!      mesh=>extract_mesh(state(1),"PressureMesh_Continuous")
     
       mesh=>extract_mesh(state(1),"PressureMesh_Discontinuous")
       
       if (stat/=0) then
-         FLAbort("Attempting to add drag term, when no velocity in contiuous phase")
+         FLAbort("Attempting to add drag term, when no velocity in continuous phase")
       end if
       dispersed_velocity =>extract_vector_field(state(dispersed_phase ),"Velocity",stat)
       if (stat/=0) then
@@ -1091,7 +1410,61 @@
       call deallocate(ratio)
 
     end subroutine add_drag_term
-      
+    
+
+    subroutine get_solid_solid_interaction_options(phase,state,options)
+      integer :: phase
+      type(state_type), dimension(:) :: state
+      type(solid_solid_interaction_option_type) :: options
+
+      character(len= OPTION_PATH_LEN) :: type, radial_distribution_fn
+
+      integer :: nclosures, closure
+
+      nclosures=option_count("/material_phase["//int2str(phase-1)//&
+           "]/multiphase_properties//solid_solid_interaction/closure")
+
+      allocate(options%list(nclosures))
+
+      do closure=1,nclosures
+
+         call get_option("/material_phase["//int2str(phase-1)//&
+           "]/multiphase_properties//solid_solid_interaction/closure["&
+         //int2str(closure-1)//"]/name",&
+         type)
+         select case(trim(type))
+         case("Syamlal")
+            options%list(closure)%type=0
+            call get_option("/material_phase["//int2str(phase-1)//&
+             "]/multiphase_properties//solid_solid_interaction/closure["&
+             //int2str(closure-1)//"]/coefficient_of_friction",&
+             options%list(closure)%coefficient_of_friction,default=0.15)
+            call get_option("/material_phase["//int2str(phase-1)//&
+             "]/multiphase_properties//solid_solid_interaction/closure["&
+             //int2str(closure-1)//"]/radial_diatribution_function/name",&
+                  radial_distribution_fn)
+             select case(trim(radial_distribution_fn))
+             case("Lebowitz")
+                options%list(closure)%radial_distribution_function=0
+             end select
+          end select
+       end do
+
+    end subroutine get_solid_solid_interaction_options
+  
+    subroutine get_polydispersive_drag_options(phase,state,options)
+      integer :: phase
+      type(state_type), dimension(:) :: state
+      type(polydispersive_drag_option_type) :: options
+
+      call get_option("/material_phase["//int2str(phase-1)//&
+           "]/multiphase_properties/polydispersive_drag/lubication_distance",&
+           options%lubrication_distance,default=tiny(0.0))
+     
+
+    end subroutine get_polydispersive_drag_options
+
+
 
     subroutine get_drag_options(phase,state,options)
       integer :: phase

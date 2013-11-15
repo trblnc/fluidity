@@ -277,8 +277,6 @@ subroutine strong_bc_solver(state,A, &
           do n=1,dim
              call zero_rows(matrix,(p-1)*dim+n,surface_node_list,1.0e100)
 
-             print*, 
-
              do k=1, size(surface_node_list)
                 solution%val((p-1)*dim+n,surface_node_list(k))=0.0
                 rhs%val((p-1)*dim+n,surface_node_list(k))=0.0
