@@ -377,7 +377,7 @@
            T, epsilon, solid_pressure,absorb_out
       real :: CoefficientOfRestitution, d0
       character(len=OPTION_PATH_LEN) :: option_path
-      integer :: stat
+      integer :: stat, coarse
 
 
       allocate(solid_source%ptr)
@@ -400,9 +400,10 @@
                  CoefficientOfRestitution,default=DEFAULT_E)
       option_path=trim(state(iphase)%option_path)//'/multiphase_properties/drag/diameter'
             call get_option(trim(option_path),d0,default=0.001)
+            call get_option(trim(state(iphase)%option_path)//'/multiphase_properties/coarse_graining',coarse,default=1)
 
       t_absorb=2.0*(1.0-CoefficientOfRestitution**2)*abs(epsilon%val*density%val*distribution_function%val)*&
-           (4.0/d0*sqrt(abs(T%val)/3.1415927))
+           (4.0/(coarse*d0)*sqrt(abs(T%val)/3.1415927))
          ! misssing a div u term here!
 !                    + 2.0*drag_coeff
       
@@ -430,7 +431,7 @@
       
       type(mesh_type), pointer :: mat_mesh
 
-      integer ::stat
+      integer ::stat, coarse
 
       distribution_function=>extract_scalar_field(state(phase),"RadialDistributionFunction")
       density=>extract_scalar_field(state(phase),"Density")
@@ -446,6 +447,7 @@
            CoefficientOfRestitution,default=DEFAULT_E)
       option_path=trim(state(phase)%option_path)//'/multiphase_properties/drag/diameter'
             call get_option(trim(option_path),d0,default=0.001)
+            call get_option(trim(state(phase)%option_path)//'/multiphase_properties/coarse_graining',coarse,default=1)
 
       do ele=1,ele_count(T)
          t_nodes=>ele_nodes(T,ele)
@@ -453,7 +455,7 @@
 
          do idim=1,mesh_dim(t)
             tdiffusion(mat_nodes,idim,idim)=4.0/3.0*abs(density%val(t_nodes)&
-                 *epsilon%val(T_nodes)*d0*(1.0+CoefficientOfRestitution)&
+                 *epsilon%val(T_nodes)*coarse*d0*(1.0+CoefficientOfRestitution)&
                  *distribution_function%val(T_nodes))*sqrt(abs(T%val(t_nodes))/3.1415927)
          end do
 

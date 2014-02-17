@@ -675,7 +675,8 @@ start =
 			},	
 		    	comment}?,
 		    comment
-	       }?,      
+	       }?,
+	       element coarse_graining {integer}?,	      
                ## Option for capillary pressure				 
                element capillary_pressure {
                   ## Brookes-Corey equation
