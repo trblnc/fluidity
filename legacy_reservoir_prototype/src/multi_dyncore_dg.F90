@@ -74,13 +74,13 @@
          NCOLCT, FINDCT, COLCT, &
          CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
          U_ELE_TYPE, CV_ELE_TYPE, CV_SELE_TYPE, &
-         NPHASE,  &
+         NPHASE, NCOMP, &
          CV_NLOC, U_NLOC, X_NLOC,  &
          CV_NDGLN, X_NDGLN, U_NDGLN, &
          CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
          X, Y, Z, &
-         NU, NV, NW, NUOLD, NVOLD, NWOLD, &
-         UG, VG, WG, &
+         NU, NV, NW,&
+         NUOLD, NVOLD, NWOLD, &
          T, TOLD, &
          DEN, DENOLD, &
          MAT_NLOC,MAT_NDGLN,MAT_NONODS, TDIFFUSION, &
@@ -98,7 +98,6 @@
          IGOT_T2, T2, T2OLD, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
          THETA_GDIFF, &
          SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
          MEAN_PORE_CV, &
          option_path, &
          mass_ele_transp, &
@@ -107,10 +106,11 @@
       ! Solve for internal energy using a control volume method.
 
       implicit none
-      type( state_type ), dimension( : ), intent( inout ) :: state
-      REAL, DIMENSION( : , : ) :: LIMTOLD,LIMT2OLD,LIMDOLD,LIMDTOLD,LIMDTT2OLD,NDOTQOLD
+      type( state_type ), dimension( : ), intent( inout ), pointer :: state
+      REAL, DIMENSION( : , : ,:) :: LIMTOLD,LIMT2OLD,LIMDOLD,LIMDTOLD,LIMDTT2OLD
+      REAL, DIMENSION( : , : ) :: NDOTQOLD
       INTEGER, intent( in ) :: NCOLACV, NCOLCT, CV_NONODS, U_NONODS, X_NONODS, MAT_NONODS, TOTELE, &
-           U_ELE_TYPE, CV_ELE_TYPE, CV_SELE_TYPE, NPHASE, CV_NLOC, U_NLOC, X_NLOC,  MAT_NLOC, &
+           U_ELE_TYPE, CV_ELE_TYPE, CV_SELE_TYPE, NPHASE, NCOMP, CV_NLOC, U_NLOC, X_NLOC,  MAT_NLOC, &
            CV_SNLOC, U_SNLOC, STOTEL, XU_NLOC, NDIM, NCOLM, NCOLELE, &
            NOPT_VEL_UPWIND_COEFS, &
            IGOT_T2, SCVNGI_THETA, IN_ELE_UPWIND, DG_ELE_UPWIND
@@ -134,13 +134,13 @@
       INTEGER, DIMENSION( : ), intent( in ) :: FINDCT
       INTEGER, DIMENSION( : ), intent( in ) :: COLCT
       REAL, DIMENSION( : ), intent( in ) :: X, Y, Z
-      REAL, DIMENSION( : ), intent( in ) :: NU, NV, NW, NUOLD, NVOLD, NWOLD, UG, VG, WG
+      REAL, DIMENSION( : ), intent( in ) :: NU, NV, NW, NUOLD, NVOLD, NWOLD
       REAL, DIMENSION( : ), intent( inout ) :: T, T_FEMT, DEN_FEMT
       REAL, DIMENSION( : ), intent( in ) :: TOLD
       REAL, DIMENSION( : ), intent( in ) :: DEN, DENOLD
       REAL, DIMENSION( : ), intent( in ) :: T2, T2OLD
       REAL, DIMENSION( : ), intent( inout ) :: THETA_GDIFF
-      REAL, DIMENSION( :,: ), intent( inout ), optional :: THETA_FLUX, ONE_M_THETA_FLUX
+      REAL, DIMENSION( :,:,: ), intent( inout ), optional :: THETA_FLUX, ONE_M_THETA_FLUX
       REAL, DIMENSION( :,:,:, : ), intent( in ) :: TDIFFUSION
       INTEGER, intent( in ) :: T_DISOPT, T_DG_VEL_INT_OPT
       REAL, intent( in ) :: DT, T_THETA
@@ -162,7 +162,6 @@
       INTEGER, DIMENSION( : ), intent( in ) :: FINELE
       INTEGER, DIMENSION( : ), intent( in ) :: COLELE
       REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-      INTEGER, INTENT(IN) :: NOIT_DIM
       REAL, DIMENSION( : ), intent( inout ) :: MEAN_PORE_CV
       character( len = * ), intent( in ), optional :: option_path
       real, dimension( : ), intent( inout ), optional :: mass_ele_transp
@@ -176,17 +175,21 @@
       REAL, DIMENSION( : , : , : ), allocatable :: dense_block_matrix
       REAL, DIMENSION( : ), allocatable :: CV_RHS_SUB, ACV_SUB
       INTEGER, DIMENSION( : ), allocatable :: COLACV_SUB, FINACV_SUB, MIDACV_SUB
+
+      real,dimension(ncomp,nphase,cv_nonods) :: ltold,lden,ldenold, lt_femt,lden_femt
+      real,dimension(1,nphase,cv_nonods) :: lt2,lt2old
       INTEGER :: NCOLACV_SUB, IPHASE, I, J
       REAL :: SECOND_THETA
-      INTEGER :: STAT
+      INTEGER :: STAT, ICOMP, nblock_acv
       character( len = option_path_len ) :: path
 
 
       ALLOCATE( ACV( NCOLACV ) )
       ALLOCATE( mass_mn_pres( size(small_COLACV ) ))
-      allocate( block_acv(size(block_to_global_acv) ) )
-      allocate( dense_block_matrix (nphase,nphase,cv_nonods) ); dense_block_matrix=0;
-      ALLOCATE( CV_RHS( CV_NONODS * NPHASE ) )
+      nblock_acv=size(block_to_global_acv)
+      allocate( block_acv(nblock_acv*ncomp ) )
+      allocate( dense_block_matrix (nphase,nphase,cv_nonods*ncomp) ); dense_block_matrix=0;
+      ALLOCATE( CV_RHS( CV_NONODS * NPHASE * NCOMP ) )
 
       if( present( option_path ) ) then
 
@@ -214,6 +217,13 @@
       lump_eqns = have_option( '/material_phase[0]/scalar_field::PhaseVolumeFraction/prognostic/' // &
            'spatial_discretisation/continuous_galerkin/mass_terms/lump_mass_matrix' )
 
+      ! TO the new order
+      T=reorder(T,[ncomp,nphase,cv_nonods],order=[3,2,1])
+      lTold=reshape(Told,[ncomp,nphase,cv_nonods],order=[3,2,1])
+      lden=reshape(den,[ncomp,nphase,cv_nonods],order=[3,2,1])
+      ldenold=reshape(denold,[ncomp,nphase,cv_nonods],order=[3,2,1])
+      lt2=reshape(T2,[igot_t2,nphase,cv_nonods],order=[3,2,1])
+      lt2old=reshape(T2old,[igot_t2,nphase,cv_nonods],order=[3,2,1])
 
       Loop_NonLinearFlux: DO ITS_FLUX_LIM = 1, NITS_FLUX_LIM
 
@@ -224,29 +234,37 @@
               SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV, &
               CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
               CV_ELE_TYPE,  &
-              NPHASE, &
+              NPHASE, NCOMP,&
               CV_NLOC, U_NLOC, X_NLOC,  &
               CV_NDGLN, X_NDGLN, U_NDGLN, &
               CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
               X, Y, Z, NU, NV, NW, &
               NU, NV, NW, NUOLD, NVOLD, NWOLD, &
-              T, TOLD, DEN, DENOLD, &
+              reshape(T,[ncomp,nphase,cv_nonods]),&
+              ltold,lden,ldenold,&
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
               T_DISOPT, T_DG_VEL_INT_OPT, DT, T_THETA, SECOND_THETA, T_BETA, &
-              SUF_T_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+              reshape(SUF_T_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
+              reshape(SUF_D_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
+              SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
               SUF_T_BC_ROB1, SUF_T_BC_ROB2,  &
-              WIC_T_BC, WIC_D_BC, WIC_U_BC, &
+              reshape(WIC_T_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
+              reshape(WIC_D_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
+              reshape(WIC_U_BC,[nphase,u_nonods],order=[2,1]), &
               DERIV, P,  &
-              T_SOURCE, T_ABSORB, VOLFRA_PORE, &
+              reshape(T_SOURCE,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
+              T_ABSORB, VOLFRA_PORE, &
               NDIM, &
               NCOLM, FINDM, COLM, MIDM, &
               XU_NLOC, XU_NDGLN, FINELE, COLELE, NCOLELE, &
               OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
-              T_FEMT, DEN_FEMT, &
-              IGOT_T2, T2, T2OLD, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
+              lT_FEMT, lDEN_FEMT, &
+              IGOT_T2, lT2, lT2OLD, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
               THETA_GDIFF, &
-              SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-              NOIT_DIM, &
+              reshape(SUF_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
+              reshape( WIC_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              IN_ELE_UPWIND, DG_ELE_UPWIND, &
               MEAN_PORE_CV, &
               SMALL_FINACV, SMALL_COLACV, size(small_colacv), mass_Mn_pres, THERMAL, &
               mass_ele_transp, &
@@ -258,6 +276,8 @@
          Conditional_Lumping: IF(LUMP_EQNS) THEN
             ! Lump the multi-phase flow eqns together
             ALLOCATE( CV_RHS_SUB( CV_NONODS ))
+
+            ! Won't work for multicomponent flow, so no icomp loop
 
             CV_RHS_SUB = 0.0
             DO IPHASE = 1, NPHASE
@@ -285,35 +305,37 @@
 
          ELSE
 
-            call assemble_global_multiphase_csr(acv,&
-                 block_acv,dense_block_matrix,&
-                 block_to_global_acv,global_dense_block_acv)
+            ! loop over components to solve
 
-            IF( IGOT_T2 == 1) THEN
-               !CALL SIMPLE_SOLVER( ACV, T, CV_RHS,  &
-               !     NCOLACV, nphase * CV_NONODS, FINACV, COLACV, MIDACV,  &
-               !     1.E-10, 1., 0., 1., 400 )
-               T([([(i+(j-1)*nphase,j=1,cv_nonods)],i=1,nphase)])=T
-               CALL SOLVER( ACV, T, CV_RHS, &
-                    FINACV, COLACV, &
-                    trim('/material_phase::Component1/scalar_field::ComponentMassFractionPhase1/prognostic') )
-               T([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=T
-            ELSE
-               T([([(i+(j-1)*nphase,j=1,cv_nonods)],i=1,nphase)])=T
-               CALL SOLVER( ACV, T, CV_RHS, &
-                    FINACV, COLACV, &
-                    trim(option_path) )
-               T([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=T
-            END IF
-            !ewrite(3,*)'cv_rhs:', cv_rhs
-            !ewrite(3,*)'SUF_T_BC:',SUF_T_BC
-            !ewrite(3,*)'ACV:',  (acv(i),i= FINACV(1), FINACV(2)-1)
-            !ewrite(3,*)'T_ABSORB:',((T_ABSORB(1,i,j), i=1,nphase),j=1,nphase)
-            !ewrite(3,*)
+            do icomp=1,ncomp
+
+               call assemble_global_multiphase_csr(acv,&
+                    block_acv((icomp-1)*nblock_acv+1:icomp*nblock_acv),&
+                    dense_block_matrix(:,:,(icomp-1)*cv_nonods+1:icomp*cv_nonods),&
+                    block_to_global_acv,global_dense_block_acv)
+
+               IF( IGOT_T2 == 1) THEN
+                  CALL SOLVER( ACV, T, CV_RHS, &
+                       FINACV, COLACV, &
+                       trim('/material_phase::Component1/scalar_field::ComponentMassFractionPhase1/prognostic') )
+               ELSE
+                  CALL SOLVER( ACV, T, CV_RHS, &
+                       FINACV, COLACV, &
+                       trim(option_path) )
+               END IF
+
+            end do
+
 
          END IF Conditional_Lumping
 
       END DO Loop_NonLinearFlux
+
+      ! Back to the old ordering
+      T=reorder(T,[cv_nonods,nphase,ncomp],[3,2,1])
+
+      t_femt=reorder([lt_femt],[cv_nonods,nphase,ncomp],[3,2,1])
+      DEN_femt=reorder([lDEN_femt],[cv_nonods,nphase,ncomp],[3,2,1])
 
       DEALLOCATE( ACV )
       deALLOCATE( mass_mn_pres )
@@ -357,7 +379,6 @@
          IGOT_T2, T2, T2OLD, IGOT_THETA_FLUX, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
          THETA_FLUX, ONE_M_THETA_FLUX, THETA_GDIFF, &
          SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
          MEAN_PORE_CV, &
          THERMAL, &
          mass_ele_transp, &
@@ -425,7 +446,6 @@
       INTEGER, DIMENSION( : ), intent( in ) :: FINELE
       INTEGER, DIMENSION( : ), intent( in ) :: COLELE
       REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-      INTEGER, INTENT( IN ) :: NOIT_DIM
       REAL, DIMENSION( : ), intent( inout ) :: MEAN_PORE_CV
       real, dimension( : ), intent( inout ) :: mass_ele_transp
       character( len = * ), intent( in ), optional :: option_path
@@ -477,7 +497,6 @@
               IGOT_T2, T2, T2OLD, IGOT_THETA_FLUX, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
               THETA_FLUX, ONE_M_THETA_FLUX, THETA_GDIFF, &
               SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-              NOIT_DIM, &
               MEAN_PORE_CV, &
               FINACv, COLACV, NCOLACV, ACV, THERMAL, &
               mass_ele_transp )
@@ -724,13 +743,12 @@
          Sat_FEMT, DEN_FEMT, &
          SCVNGI_THETA, USE_THETA_FLUX, &
          IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
          option_path, &
          mass_ele_transp,&
          THETA_FLUX, ONE_M_THETA_FLUX)
 
       implicit none
-      type( state_type ), dimension( : ), intent( in ) :: state
+      type( state_type ), dimension( : ), intent( inout ), pointer :: state
       INTEGER, intent( in ) :: NCOLACV, NCOLCT, &
            CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
            CV_ELE_TYPE, &
@@ -758,8 +776,8 @@
       REAL, DIMENSION( : ), intent( in ) :: X, Y, Z
       REAL, DIMENSION( : ), intent( in ) :: U, V, W, NU, NV, NW, NUOLD, NVOLD, NWOLD
       REAL, DIMENSION( : ), intent( inout ) :: SATURA, SATURAOLD, Sat_FEMT, DEN_FEMT
-      REAL, DIMENSION( : ), intent( in ) :: DEN, DENOLD
-      REAL, DIMENSION( :, :), intent( inout ), optional :: THETA_FLUX, ONE_M_THETA_FLUX
+      REAL, DIMENSION( : ), intent( inout ) :: DEN, DENOLD
+      REAL, DIMENSION( :, :,:), intent( inout ), optional :: THETA_FLUX, ONE_M_THETA_FLUX
       INTEGER, intent( in ) :: V_DISOPT, V_DG_VEL_INT_OPT
       REAL, intent( in ) :: DT, V_THETA
       REAL, intent( inout ) :: V_BETA
@@ -777,7 +795,6 @@
       INTEGER, DIMENSION( : ), intent( in ) :: FINELE
       INTEGER, DIMENSION( : ), intent( in ) :: COLELE
       REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-      INTEGER, INTENT( IN ) :: NOIT_DIM
       character(len= * ), intent(in), optional :: option_path
       real, dimension( : ), intent( inout ) :: mass_ele_transp
 
@@ -789,14 +806,17 @@
       REAL, DIMENSION( :,:,:,: ), allocatable :: TDIFFUSION
       REAL, DIMENSION( : ), allocatable :: SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, SUF_T2_BC
       INTEGER, DIMENSION( : ), allocatable :: WIC_T2_BC
-      REAL, DIMENSION( : ), allocatable :: THETA_GDIFF, T2, T2OLD, MEAN_PORE_CV
+      REAL, DIMENSION( : ), allocatable :: THETA_GDIFF, MEAN_PORE_CV
+      REAL, DIMENSION( :,:,: ), allocatable :: T2, T2OLD
       LOGICAL :: GET_THETA_FLUX
       REAL :: SECOND_THETA
       INTEGER :: STAT, i,j
       character( len = option_path_len ) :: path
 
-      REAL, DIMENSION( : , :  ), allocatable :: LIMTOLD,LIMT2OLD,LIMDOLD,LIMDTOLD,LIMDTT2OLD,NDOTQOLD
+      REAL, DIMENSION( : , : , : ), allocatable :: LIMTOLD,LIMT2OLD,LIMDOLD,LIMDTOLD,LIMDTT2OLD
+      REAL, DIMENSION( : , :  ), allocatable :: NDOTQOLD
       integer :: cv_ngi, cv_ngi_short, scvngi, sbcvngi, nface, face_count
+      real, dimension(1,nphase,cv_nonods) :: lsat_femt,lden_femt
 
       face_count=CV_count_faces( SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV,&
            CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
@@ -813,17 +833,17 @@
            small_finacv,small_colacv,size(small_colacv) )
 
       allocate(ndotqold(nphase,face_count),&
-           LIMTOLD(nphase,face_count),&
-           LIMT2OLD(nphase,face_count),&
-           LIMDOLD(nphase,face_count),&
-           LIMDTOLD(nphase,face_count),&
-           LIMDTT2OLD(nphase,face_count))
+           LIMTOLD(1,nphase,face_count),&
+           LIMT2OLD(1,nphase,face_count),&
+           LIMDOLD(1,nphase,face_count),&
+           LIMDTOLD(1,nphase,face_count),&
+           LIMDTT2OLD(1,nphase,face_count))
 
       GET_THETA_FLUX = .FALSE.
       IGOT_T2 = 0
 
-      ALLOCATE( T2( CV_NONODS * NPHASE * IGOT_T2 ))
-      ALLOCATE( T2OLD( CV_NONODS * NPHASE * IGOT_T2 ))
+      ALLOCATE( T2(0,nphase,cv_nonods ))
+      ALLOCATE( T2OLD( 0,nphase,cv_nonods ))
       ALLOCATE( SUF_T2_BC_ROB1( STOTEL * CV_SNLOC * NPHASE * IGOT_T2  ))
       ALLOCATE( SUF_T2_BC_ROB2( STOTEL * CV_SNLOC * NPHASE * IGOT_T2  ))
       ALLOCATE( SUF_T2_BC( STOTEL * CV_SNLOC * NPHASE * IGOT_T2  ))
@@ -858,32 +878,47 @@
       ! THIS DOES NOT WORK FOR NITS_FLUX_LIM>1 (NOBODY KNOWS WHY)
 
 
+      ! TO the new order
+      satura=reorder(satura,[nphase,cv_nonods],[2,1])
+      saturaold=reorder(saturaold,[nphase,cv_nonods],[2,1])
+      den=reorder(den,[nphase,cv_nonods],[2,1])
+      denold=reorder(denold,[nphase,cv_nonods],[2,1])
+
       call CV_GET_ALL_LIMITED_VALS( state, &
          LIMTOLD,LIMT2OLD,LIMDOLD,LIMDTOLD,LIMDTT2OLD,NDOTQOLD,&
          SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV, &
          CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
          CV_ELE_TYPE,  &
-         NPHASE,  &
+         NPHASE, 1,  &
          CV_NLOC, U_NLOC, X_NLOC, &
          CV_NDGLN, X_NDGLN, U_NDGLN, &
          CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
-         X, Y, Z, NU, NV, NW, &
+         X, Y, Z, &
+         U, V, W, &
          NU, NV, NW, &
-         SATURAOLD, DENOLD, &
+         reshape(SATURAOLD,[1,nphase,cv_nonods]),&
+         reshape(DENOLD,[1,nphase,cv_nonods]), &
          MAT_NLOC, MAT_NDGLN, MAT_NONODS, & 
          V_DISOPT, V_DG_VEL_INT_OPT, DT, V_THETA, SECOND_THETA, V_BETA, &
-         SUF_VOL_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+         reshape(SUF_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
+         reshape(SUF_D_BC,[1,nphase,stotel],order=[3,2,1]),&
+         SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
          SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2,  &
-         WIC_VOL_BC, WIC_D_BC, WIC_U_BC, &
+         reshape(WIC_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
+         reshape(WIC_D_BC, [1,nphase,stotel],order=[3,2,1]),&
+         reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
          DERIV, P, &
-         V_SOURCE, V_ABSORB, VOLFRA_PORE, &
+         reshape(V_SOURCE,[1,nphase,cv_nonods]),&
+         V_ABSORB, VOLFRA_PORE, &
          NDIM, &
          NCOLM, FINDM, COLM, MIDM, &
          XU_NLOC, XU_NDGLN, FINELE, COLELE, NCOLELE, &
          OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
-         IGOT_T2, T2OLD, SCVNGI_THETA,&
-         SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
+         IGOT_T2,t2, SCVNGI_THETA,&
+         reshape(SUF_T2_BC,[igot_t2,nphase,stotel],order=[3,2,1]),&
+         SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
+         reshape( WIC_T2_BC,[igot_t2,nphase,stotel],order=[3,2,1]),&
+         IN_ELE_UPWIND, DG_ELE_UPWIND, &
          MEAN_PORE_CV, &
          SMALL_FINACV, SMALL_COLACV, size(small_colacv), &
          MASS_ELE_TRANSP, &
@@ -899,36 +934,47 @@
               SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV, &
               CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
               CV_ELE_TYPE,  &
-              NPHASE,  &
+              NPHASE, 1,  &
               CV_NLOC, U_NLOC, X_NLOC,  &
               CV_NDGLN, X_NDGLN, U_NDGLN, &
               CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
               X, Y, Z, U, V, W, &
               NU, NV, NW, NUOLD, NVOLD, NWOLD, & 
-              SATURA, SATURAOLD, DEN, DENOLD, &
+              reshape(SATURA,[1,nphase,cv_nonods]),&
+              reshape(SATURAOLD,[1,nphase,cv_nonods]),&
+              reshape(DEN,[1,nphase,cv_nonods]),&
+              reshape(DENOLD,[1,nphase,cv_nonods]), &
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
               V_DISOPT, V_DG_VEL_INT_OPT, DT, V_THETA, SECOND_THETA, V_BETA, &
-              SUF_VOL_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+              reshape(SUF_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
+              reshape(SUF_D_BC,[1,nphase,stotel],order=[3,2,1]),&
+              SUF_U_BC, SUF_V_BC, SUF_W_BC,&
+              SUF_SIG_DIAGTEN_BC, &
               SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2,  &
-              WIC_VOL_BC, WIC_D_BC, WIC_U_BC, &
+              reshape(WIC_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
+              reshape(WIC_D_BC, [1,nphase,stotel],order=[3,2,1]),&
+              reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
               DERIV, P, &
-              V_SOURCE, V_ABSORB, VOLFRA_PORE, &
+              reshape(V_SOURCE,[1,nphase,stotel],order=[3,2,1]),&
+              V_ABSORB, VOLFRA_PORE, &
               NDIM,&
               NCOLM, FINDM, COLM, MIDM, &
               XU_NLOC, XU_NDGLN, FINELE, COLELE, NCOLELE, &
               OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
-              Sat_FEMT, DEN_FEMT, &
+              lSat_FEMT, lDEN_FEMT, &
               IGOT_T2, T2, T2OLD, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
               THETA_GDIFF, &
-              SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-              NOIT_DIM, &
+              reshape(SUF_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
+              reshape( WIC_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              IN_ELE_UPWIND, DG_ELE_UPWIND, &
               MEAN_PORE_CV, &
               SMALL_FINACV, SMALL_COLACV, size(small_colacv), mass_mn_pres, THERMAL, &
               mass_ele_transp, &
               option_path,&
               THETA_FLUX, ONE_M_THETA_FLUX)
 
-         satura=0.0 !saturaold([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])
+         satura=0.0 
 
          call assemble_global_multiphase_csr(acv,&
               block_acv,dense_block_matrix,&
@@ -937,9 +983,21 @@
               FINACV, COLACV, &
               trim(option_path) )
 
-         satura([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=satura
 
       END DO Loop_NonLinearFlux
+      
+
+      ! Back to the old ordering
+      satura([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=satura
+      saturaOLD([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=saturaOLD
+      den([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=den
+      DENOLD([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=DENoLD
+
+      sat_femt=[lsat_femt]
+      sat_femt([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=sat_femt
+      DEN_femt=[lDEN_femt]
+      DEN_femt([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=DEN_femt
+
 
       DEALLOCATE( ACV )
       DEALLOCATE( mass_mn_pres )
@@ -1001,7 +1059,6 @@
          IGOT_THETA_FLUX, SCVNGI_THETA, USE_THETA_FLUX, &
          THETA_FLUX, ONE_M_THETA_FLUX, &
          IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
          IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD, &
          scale_momentum_by_volume_fraction )
 
@@ -1079,9 +1136,8 @@
       REAL, DIMENSION(  : ), intent( in ) :: UDEN, UDENOLD
       REAL, DIMENSION(  : ,  : ,  : ,  :  ), intent( in ) :: UDIFFUSION
       REAL, DIMENSION(  :  ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-      REAL, DIMENSION( : ,  :  ), intent( inout ) :: &
+      REAL, DIMENSION( : ,  : ,: ), intent( inout ) :: &
            THETA_FLUX, ONE_M_THETA_FLUX
-      INTEGER, INTENT( IN ) :: NOIT_DIM
       REAL, DIMENSION( :  ), intent( in ) :: PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD
 
       ! Local Variables
@@ -1167,7 +1223,6 @@
            IGOT_THETA_FLUX, SCVNGI_THETA, USE_THETA_FLUX, &
            THETA_FLUX, ONE_M_THETA_FLUX, &
            IN_ELE_UPWIND, DG_ELE_UPWIND, &
-           NOIT_DIM, &
            IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD, scale_momentum_by_volume_fraction )
 
       !ewrite(3,*) 'global_solve, just_bl_diag_mat', global_solve, just_bl_diag_mat
@@ -1745,7 +1800,6 @@
          IGOT_THETA_FLUX, SCVNGI_THETA, USE_THETA_FLUX, &
          THETA_FLUX, ONE_M_THETA_FLUX, &
          IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
          IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD,scale_momentum_by_volume_fraction )
       implicit none
 
@@ -1783,7 +1837,7 @@
       REAL, DIMENSION( :  ), intent( inout ) ::  CV_P, P
       REAL, DIMENSION( :  ), intent( in ) :: DEN, DENOLD, SATURA, SATURAOLD
       REAL, DIMENSION(:  ), intent( in ) :: DERIV
-      REAL, DIMENSION(: , :  ), intent( inout ) :: THETA_FLUX, ONE_M_THETA_FLUX
+      REAL, DIMENSION(: , : ,: ), intent( inout ) :: THETA_FLUX, ONE_M_THETA_FLUX
       REAL, DIMENSION( :  ), intent( inout ) :: CT_RHS,DIAG_SCALE_PRES
       REAL, DIMENSION( :  ), intent( inout ) :: U_RHS
       REAL, DIMENSION( :  ), intent( inout ) :: MCY_RHS
@@ -1833,7 +1887,6 @@
       REAL, DIMENSION( : , : , : , :  ), intent( in ) :: UDIFFUSION
       LOGICAL, intent( inout ) :: JUST_BL_DIAG_MAT
       REAL, DIMENSION( :  ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-      INTEGER, INTENT( IN ) :: NOIT_DIM
       REAL, DIMENSION( : ), intent( in ) :: PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD
 
       ! Local Variables
@@ -1880,7 +1933,6 @@
            IGOT_THETA_FLUX, SCVNGI_THETA, USE_THETA_FLUX, &
            THETA_FLUX, ONE_M_THETA_FLUX, &
            IN_ELE_UPWIND, DG_ELE_UPWIND, &
-           NOIT_DIM, &
            IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD,scale_momentum_by_volume_fraction )
 
       IF(.NOT.GLOBAL_SOLVE) THEN
@@ -1990,7 +2042,6 @@
          IGOT_THETA_FLUX, SCVNGI_THETA, USE_THETA_FLUX, &
          THETA_FLUX, ONE_M_THETA_FLUX, &
          IN_ELE_UPWIND, DG_ELE_UPWIND, &
-         NOIT_DIM, &
          IPLIKE_GRAD_SOU, PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD ,scale_momentum_by_volume_fraction)
       use printout
       implicit none
@@ -2026,7 +2077,7 @@
       REAL, DIMENSION(  :  ), intent( in ) :: CV_P, P
       REAL, DIMENSION(  :  ), intent( in ) :: DEN, DENOLD, SATURA, SATURAOLD
       REAL, DIMENSION(  :  ), intent( in ) :: DERIV
-      REAL, DIMENSION(  : ,  :   ), intent( inout ) :: THETA_FLUX, ONE_M_THETA_FLUX
+      REAL, DIMENSION(  : ,  : ,:  ), intent( inout ) :: THETA_FLUX, ONE_M_THETA_FLUX
       REAL, intent( in ) :: DT
       INTEGER, DIMENSION(  :  ), intent( in ) :: FINDC
       INTEGER, DIMENSION(  :  ), intent( in ) :: COLC
@@ -2074,7 +2125,6 @@
       REAL, DIMENSION( :, :, :, : ), intent( in ) :: UDIFFUSION
       LOGICAL, intent( inout ) :: JUST_BL_DIAG_MAT
       REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-      INTEGER, INTENT( IN ) :: NOIT_DIM
       REAL, DIMENSION( :), intent( in ) :: PLIKE_GRAD_SOU_COEF, PLIKE_GRAD_SOU_GRAD
 
       ! Local variables
@@ -2198,7 +2248,6 @@
            IGOT_T2, T2, T2OLD, IGOT_THETA_FLUX, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
            THETA_FLUX, ONE_M_THETA_FLUX, THETA_GDIFF, &
            SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-           NOIT_DIM, &
            MEAN_PORE_CV, &
            FINDCMC, COLCMC, NCOLCMC, MASS_MN_PRES, THERMAL, &
            dummy_transp )
@@ -6072,7 +6121,7 @@
       real, dimension( cv_nonods * nphase * ndim ), intent( inout ) :: U_SOURCE_CV
       real, dimension( u_nonods * nphase * ndim ), intent( inout ) :: U_SOURCE
 
-      type(state_type), dimension( : ), intent( inout ) :: state
+      type(state_type), dimension( : ), intent( inout ), pointer :: state
       integer, intent( in ) :: nphase, ncomp, cv_nonods, U_NONODS, X_NONODS, MAT_NONODS, &
            &                       NCOLACV, NCOLCT, TOTELE, CV_ELE_TYPE, CV_SELE_TYPE, U_ELE_TYPE, &
            &                       CV_NLOC, U_NLOC, X_NLOC, MAT_NLOC, CV_SNLOC, U_SNLOC, NDIM, &
@@ -6355,7 +6404,7 @@
       use printout
       ! Inputs/Outputs
       IMPLICIT NONE
-      type(state_type), dimension( : ), intent( inout ) :: state
+      type(state_type), dimension( : ), intent( inout ), pointer :: state
       INTEGER, PARAMETER :: NPHASE = 1
       INTEGER, PARAMETER :: SMOOTH_NITS = 0 ! smoothing iterations, 10 seems good. 
       INTEGER, intent( in ) :: NCOLACV, NCOLCT, CV_NONODS, U_NONODS, X_NONODS, MAT_NONODS, &
@@ -6485,7 +6534,7 @@
 
       REAL, PARAMETER :: W_SUM_ONE = 1.0, TOLER=1.0E-10
 
-      integer :: cv_inod_ipha, IGETCT, U_NODK_IPHA, NOIT_DIM, &
+      integer :: cv_inod_ipha, IGETCT, U_NODK_IPHA, &
            CV_DG_VEL_INT_OPT, IN_ELE_UPWIND, DG_ELE_UPWIND, &
            CV_DISOPT, IGOT_THETA_FLUX, scvngi_theta,SMOOTH_ITS
       ! Functions...
@@ -6505,7 +6554,8 @@
       real, allocatable, dimension(:,:,:) :: T_ABSORB
       real, allocatable, dimension(:,:,:,:) :: tdiffusion
 
-      real, dimension(0,0) :: ALIMTOLD,ALIMT2OLD,ALIMDOLD,ALIMDTOLD,ALIMDTT2OLD,ANDOTQOLD
+      real, dimension(0,0,0) :: ALIMTOLD,ALIMT2OLD,ALIMDOLD,ALIMDTOLD,ALIMDTT2OLD
+      real, dimension(0,0) :: ANDOTQOLD
       
 
       DUMMY_ELE = 0
@@ -7204,7 +7254,6 @@
          DT=1.0
          T_THETA=0.0 
          T_BETA=0.0
-         NOIT_DIM=1
          LUMP_EQNS=.FALSE.
 
 
@@ -7216,12 +7265,12 @@
               NCOLCT, FINDCT, COLCT, &
               CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
               U_ELE_TYPE, CV_ELE_TYPE, CV_SELE_TYPE,  &
-              NPHASE,  &
+              NPHASE, 1, &
               CV_NLOC, U_NLOC, X_NLOC,  &
               CV_NDGLN, X_NDGLN, U_NDGLN, &
               CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
               X, Y, Z, &
-              RZERO,RZERO,RZERO, RZERO,RZERO,RZERO, RZERO,RZERO,RZERO, &
+              RZERO,RZERO,RZERO, RZERO,RZERO,RZERO, &
               CURVATURE, VOLUME_FRAC, &
               RZERO,RZERO, &
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
@@ -7239,7 +7288,6 @@
               IGOT_T2, CURVATURE, VOLUME_FRAC, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
               CURVATURE, &
               RZERO, RZERO, RZERO, IDUM, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-              NOIT_DIM, &
               ! nits_flux_lim_t
               RZERO, &
               option_path = '/material_phase[0]/scalar_field::Pressure', &
