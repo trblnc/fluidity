@@ -244,12 +244,12 @@
               ltold,lden,ldenold,&
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
               T_DISOPT, T_DG_VEL_INT_OPT, DT, T_THETA, SECOND_THETA, T_BETA, &
-              reshape(SUF_T_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
-              reshape(SUF_D_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
+              reshape(SUF_T_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),&
+              reshape(SUF_D_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),&
               SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
               SUF_T_BC_ROB1, SUF_T_BC_ROB2,  &
-              reshape(WIC_T_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
-              reshape(WIC_D_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
+              reshape(WIC_T_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),& 
+              reshape(WIC_D_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),& 
               reshape(WIC_U_BC,[nphase,u_nonods],order=[2,1]), &
               DERIV, P,  &
               reshape(T_SOURCE,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
@@ -261,9 +261,9 @@
               lT_FEMT, lDEN_FEMT, &
               IGOT_T2, lT2, lT2OLD, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
               THETA_GDIFF, &
-              reshape(SUF_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              reshape(SUF_T2_BC,[igot_t2,nphase,stotel * cv_snloc],order=[3,2,1]),&
               SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
-              reshape( WIC_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              reshape( WIC_T2_BC,[igot_t2,nphase,stotel * cv_snloc],order=[3,2,1]),&
               IN_ELE_UPWIND, DG_ELE_UPWIND, &
               MEAN_PORE_CV, &
               SMALL_FINACV, SMALL_COLACV, size(small_colacv), mass_Mn_pres, THERMAL, &
@@ -766,10 +766,11 @@
       INTEGER, DIMENSION( : ), intent( in ) :: U_SNDGLN
       INTEGER, DIMENSION( : ), intent( in ) ::  WIC_VOL_BC, WIC_D_BC, WIC_U_BC
       INTEGER, DIMENSION( : ), intent( in ) :: FINACV
-      INTEGER, DIMENSION( : ), intent( in ) :: COLACV
+      INTEGER, DIMENSION( : ), intent( in ), pointer :: COLACV
       INTEGER, DIMENSION( : ), intent( in ) :: MIDACV
-      integer, dimension(:), intent(in)  :: small_finacv,small_colacv,small_midacv
-      integer, dimension(:), intent(in)  :: block_to_global_acv
+      integer, dimension(:), intent(in)  :: small_finacv, small_midacv
+      INTEGER, DIMENSION( : ), intent( in ), pointer :: small_colacv
+      integer, dimension(:), intent(in), pointer  :: block_to_global_acv
       integer, dimension(:,:), intent(in) :: global_dense_block_acv 
       INTEGER, DIMENSION( : ), intent( in ) :: FINDCT
       INTEGER, DIMENSION( : ), intent( in ) :: COLCT
@@ -790,18 +791,18 @@
       REAL, DIMENSION( :, :, : ), intent( in ) :: V_ABSORB
       REAL, DIMENSION( : ), intent( in ) :: VOLFRA_PORE
       INTEGER, DIMENSION( : ), intent( in ) :: FINDM
-      INTEGER, DIMENSION( : ), intent( in ) :: COLM
+      INTEGER, DIMENSION( : ), intent( in ), pointer :: COLM
       INTEGER, DIMENSION( : ), intent( in ) :: MIDM
       INTEGER, DIMENSION( : ), intent( in ) :: FINELE
       INTEGER, DIMENSION( : ), intent( in ) :: COLELE
       REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
       character(len= * ), intent(in), optional :: option_path
-      real, dimension( : ), intent( inout ) :: mass_ele_transp
+      real, dimension( : ), intent( inout ), optional :: mass_ele_transp
 
       ! Local Variables
       LOGICAL, PARAMETER :: THERMAL= .false.
       integer :: nits_flux_lim, its_flux_lim, igot_t2
-      REAL, DIMENSION( : ), allocatable :: ACV, mass_mn_pres, block_ACV, CV_RHS, CT, DIAG_SCALE_PRES, CT_RHS, SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2
+      REAL, DIMENSION( : ), allocatable :: ACV, mass_mn_pres, block_ACV, CV_RHS,  SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2
       REAL, DIMENSION( :,:,: ), allocatable :: dense_block_matrix
       REAL, DIMENSION( :,:,:,: ), allocatable :: TDIFFUSION
       REAL, DIMENSION( : ), allocatable :: SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, SUF_T2_BC
@@ -857,9 +858,6 @@
       ALLOCATE( mass_mn_pres(size(small_colacv)) ) ; mass_mn_pres = 0.
       ALLOCATE( dense_block_matrix( nphase , nphase , cv_nonods) ); dense_block_matrix=0;
       ALLOCATE( CV_RHS( CV_NONODS * NPHASE ) ) ; CV_RHS = 0.
-      ALLOCATE( CT( NCOLCT * NDIM * NPHASE ) )
-      ALLOCATE( DIAG_SCALE_PRES( CV_NONODS ) )
-      ALLOCATE( CT_RHS( CV_NONODS ) )
       ALLOCATE( TDIFFUSION( MAT_NONODS, NDIM, NDIM, NPHASE ) )
       ALLOCATE( SUF_VOL_BC_ROB1(STOTEL * CV_SNLOC * NPHASE ) )
       ALLOCATE( SUF_VOL_BC_ROB2(STOTEL * CV_SNLOC * NPHASE ) )
@@ -900,8 +898,8 @@
          reshape(DENOLD,[1,nphase,cv_nonods]), &
          MAT_NLOC, MAT_NDGLN, MAT_NONODS, & 
          V_DISOPT, V_DG_VEL_INT_OPT, DT, V_THETA, SECOND_THETA, V_BETA, &
-         reshape(SUF_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
-         reshape(SUF_D_BC,[1,nphase,stotel],order=[3,2,1]),&
+         reshape(SUF_VOL_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
+         reshape(SUF_D_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
          SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
          SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2,  &
          reshape(WIC_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
@@ -915,7 +913,7 @@
          XU_NLOC, XU_NDGLN, FINELE, COLELE, NCOLELE, &
          OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
          IGOT_T2,t2, SCVNGI_THETA,&
-         reshape(SUF_T2_BC,[igot_t2,nphase,stotel],order=[3,2,1]),&
+         reshape(SUF_T2_BC,[igot_t2,nphase,stotel*cv_snloc],order=[3,2,1]),&
          SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
          reshape( WIC_T2_BC,[igot_t2,nphase,stotel],order=[3,2,1]),&
          IN_ELE_UPWIND, DG_ELE_UPWIND, &
@@ -946,8 +944,8 @@
               reshape(DENOLD,[1,nphase,cv_nonods]), &
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
               V_DISOPT, V_DG_VEL_INT_OPT, DT, V_THETA, SECOND_THETA, V_BETA, &
-              reshape(SUF_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
-              reshape(SUF_D_BC,[1,nphase,stotel],order=[3,2,1]),&
+              reshape(SUF_VOL_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
+              reshape(SUF_D_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
               SUF_U_BC, SUF_V_BC, SUF_W_BC,&
               SUF_SIG_DIAGTEN_BC, &
               SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2,  &
@@ -955,7 +953,7 @@
               reshape(WIC_D_BC, [1,nphase,stotel],order=[3,2,1]),&
               reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
               DERIV, P, &
-              reshape(V_SOURCE,[1,nphase,stotel],order=[3,2,1]),&
+              reshape(V_SOURCE,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
               V_ABSORB, VOLFRA_PORE, &
               NDIM,&
               NCOLM, FINDM, COLM, MIDM, &
@@ -964,9 +962,9 @@
               lSat_FEMT, lDEN_FEMT, &
               IGOT_T2, T2, T2OLD, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
               THETA_GDIFF, &
-              reshape(SUF_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              reshape(SUF_T2_BC,[igot_t2,nphase,stotel * cv_snloc],order=[3,2,1]),&
               SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
-              reshape( WIC_T2_BC,[igot_t2,nphase,cv_nonods],order=[3,2,1]),&
+              reshape( WIC_T2_BC,[igot_t2,nphase,stotel],order=[3,2,1]),&
               IN_ELE_UPWIND, DG_ELE_UPWIND, &
               MEAN_PORE_CV, &
               SMALL_FINACV, SMALL_COLACV, size(small_colacv), mass_mn_pres, THERMAL, &
@@ -1004,9 +1002,6 @@
       deallocate( block_acv )
       deallocate( dense_block_matrix )
       DEALLOCATE( CV_RHS )
-      DEALLOCATE( CT )
-      DEALLOCATE( DIAG_SCALE_PRES )
-      DEALLOCATE( CT_RHS )
       DEALLOCATE( TDIFFUSION )
       DEALLOCATE( SUF_VOL_BC_ROB1 )
       DEALLOCATE( SUF_VOL_BC_ROB2 )

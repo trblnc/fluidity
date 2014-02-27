@@ -407,6 +407,8 @@ contains
 
 
       GOT_DIFFUS = ( R2NORM( TDIFFUSION, MAT_NONODS * NDIM * NDIM * NPHASE ) /= 0 )
+      DIFF_COEF_DIVDX=0.0
+      DIFF_COEFOLD_DIVDX=0.0
 
       ewrite(3,*)'CV_DISOPT, CV_DG_VEL_INT_OPT, DT, CV_THETA, CV_BETA, LIMIT_USE_2ND, SECOND_THETA, GOT_DIFFUS:', &
            CV_DISOPT, CV_DG_VEL_INT_OPT, DT, CV_THETA, CV_BETA, LIMIT_USE_2ND, SECOND_THETA, GOT_DIFFUS
@@ -596,6 +598,7 @@ contains
       ALLOCATE( YC_CV( CV_NONODS ))
       ALLOCATE( ZC_CV( CV_NONODS ))
       ALLOCATE( DTX_ELE( ndim, ncomp, NPHASE,CV_NLOC,TOTELE ))
+      ALLOCATE( DTOLDX_ELE( ndim, ncomp, NPHASE,CV_NLOC,TOTELE ))
  
 
       ewrite(3,*)'here2'
@@ -891,9 +894,9 @@ contains
                                 CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,u_nonods],order=[3,2,1]), &
-                                reshape(WIC_U_BC,[nphase,u_nonods],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,u_nonods]), &
+                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
+                                reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
+                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc]), &
                                 UGI_COEF_ELE,  UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -1359,9 +1362,7 @@ END DO Loop_Elements
       DEALLOCATE( DENMAX_2ND_MC )
 
       DEALLOCATE( FEMT )
-      DEALLOCATE( FEMTOLD )
       DEALLOCATE( FEMDEN )
-      DEALLOCATE( FEMDENOLD )
       DEALLOCATE( MASS_CV )
       DEALLOCATE( XC_CV )
       DEALLOCATE( YC_CV )
@@ -3061,26 +3062,28 @@ END DO Loop_Elements
       INTEGER, PARAMETER :: WIC_T_BC_DIRICHLET = 1, WIC_T_BC_ROBIN = 2, &
            WIC_T_BC_DIRI_ADV_AND_ROBIN = 3, WIC_D_BC_DIRICHLET = 1, &
            WIC_U_BC_DIRICHLET = 1
-      LOGICAL, DIMENSION( : ), allocatable :: X_SHARE,LOG_ON_BOUND
+      LOGICAL, DIMENSION( : ), allocatable :: X_SHARE
       LOGICAL, DIMENSION( :, : ), allocatable :: CV_ON_FACE, U_ON_FACE, &
            CVFEM_ON_FACE, UFEM_ON_FACE
       INTEGER, DIMENSION( :,:,: ), allocatable ::  TMAX_NOD, TMIN_NOD, &
            DENMAX_NOD, DENMIN_NOD
       INTEGER, DIMENSION( :,:,: ), allocatable :: T2MAX_NOD, T2MIN_NOD
       INTEGER, DIMENSION( : ), allocatable :: FINDGPTS, &
-           CV_OTHER_LOC, U_OTHER_LOC, MAT_OTHER_LOC, &
            COLGPTS, CV_SLOC2LOC, U_SLOC2LOC
+      integer, dimension(cv_nloc) :: CV_OTHER_LOC
+      integer, dimension(u_nloc) :: u_other_loc 
+      integer, dimension(mat_nloc) :: mat_other_loc
       INTEGER, DIMENSION( : , : ), allocatable :: CV_SLOCLIST, U_SLOCLIST, &
            FACE_ELE, CV_NEILOC
       REAL, DIMENSION( :,:,:  ), allocatable :: TMAX, TMIN, DENMAX, DENMIN, &
            TMAX_2ND_MC, TMIN_2ND_MC, &
            DENMAX_2ND_MC, DENMIN_2ND_MC, &
-           FEMT, FEMTOLD, FEMDEN, FEMDENOLD
+           FEMT, FEMDEN
       REAL, DIMENSION ( : , :,:  ), allocatable ::  T2MAX, T2MIN, &
            T2MAX_2ND_MC, T2MIN_2ND_MC,  FEMT2, FEMT2OLD
       REAL, DIMENSION( : ), allocatable :: CVWEIGHT, CVWEIGHT_SHORT, SCVFEWEIGH, SBCVFEWEIGH, &
            CVNORMX, &
-           CVNORMY, CVNORMZ, SCVRA, MASS_CV, MASS_ELE, SNDOTQ, SNDOTQOLD,  &
+           CVNORMY, CVNORMZ, SCVRA, MASS_CV, MASS_ELE, SNDOTQ, &
            XC_CV, YC_CV, ZC_CV, &
            SCVDETWEI, SRA, &
            SUM_CV, ONE_PORE, SELE_OVERLAP_SCALE, &
@@ -3094,11 +3097,9 @@ END DO Loop_Elements
            SUFEN, SUFENSLX, SUFENSLY, SUFENLX, SUFENLY, SUFENLZ, &
            SBCVN,SBCVFEN, SBCVFENSLX, SBCVFENSLY, &
            SBCVFENLX, SBCVFENLY, SBCVFENLZ, SBUFEN, SBUFENSLX, SBUFENSLY, &
-           SBUFENLX, SBUFENLY, SBUFENLZ, &
-           DUMMY_ZERO_NDIM_NDIM
-      REAL, DIMENSION( : , :, : ), allocatable :: DTX_ELE,DTY_ELE,DTZ_ELE,  &
-           DTOLDX_ELE,DTOLDY_ELE,DTOLDZ_ELE
-      REAL, DIMENSION( : , :, : ), allocatable :: INV_JAC
+           SBUFENLX, SBUFENLY, SBUFENLZ
+
+      REAL, DIMENSION(:,:,:), allocatable :: INV_JAC
 
       !        ===> INTEGERS <===
       INTEGER :: CV_NGI, CV_NGI_SHORT, SCVNGI, SBCVNGI, COUNT, JCOUNT, &
@@ -3106,8 +3107,8 @@ END DO Loop_Elements
            NCOLGPTS, &
            CV_SILOC, U_KLOC, &
            CV_ILOC, CV_JLOC, IPHASE, JPHASE, &
-           CV_NODJ, CV_NODJ_IPHA, rhs_nodj_ipha,rhs_nodi_ipha,&
-           CV_NODI, CV_NODI_IPHA, CV_NODI_JPHA, U_NODK, TIMOPT, &
+           CV_NODJ, rhs_nodj_ipha,rhs_nodi_ipha,&
+           CV_NODI, U_NODK, TIMOPT, &
            JCOUNT_IPHA, IMID_IPHA, &
            NFACE, X_NODI,  &
            CV_INOD, MAT_NODI, FACE_ITS, NFACE_ITS, &
@@ -3217,14 +3218,10 @@ END DO Loop_Elements
       ALLOCATE( COLGPTS( CV_NLOC * SCVNGI )) !The size of this vector is over-estimated
       ALLOCATE( FINDGPTS( CV_NLOC + 1 ))
       ALLOCATE( SNDOTQ( SCVNGI ))
-      ALLOCATE( SNDOTQOLD( SCVNGI ))
       ALLOCATE( CV_ON_FACE( CV_NLOC, SCVNGI ))
       ALLOCATE( CVFEM_ON_FACE( CV_NLOC, SCVNGI ))
       ALLOCATE( U_ON_FACE( U_NLOC, SCVNGI ))
       ALLOCATE( UFEM_ON_FACE( U_NLOC, SCVNGI ))
-      ALLOCATE( CV_OTHER_LOC( CV_NLOC ))
-      ALLOCATE( U_OTHER_LOC( U_NLOC ))
-      ALLOCATE( MAT_OTHER_LOC( MAT_NLOC ))
       ALLOCATE( X_SHARE( X_NONODS ))
       ALLOCATE( CVWEIGHT( CV_NGI ))
       ALLOCATE( CVN( CV_NLOC, CV_NGI ))
@@ -3280,8 +3277,6 @@ END DO Loop_Elements
       ALLOCATE( SBUFENLX( U_SNLOC, SBCVNGI ))
       ALLOCATE( SBUFENLY( U_SNLOC, SBCVNGI ))
       ALLOCATE( SBUFENLZ( U_SNLOC, SBCVNGI ))
-      ALLOCATE( DUMMY_ZERO_NDIM_NDIM(NDIM,NDIM))
-      DUMMY_ZERO_NDIM_NDIM=0.0
 
       ALLOCATE( CV_SLOC2LOC( CV_SNLOC ))
       ALLOCATE( U_SLOC2LOC( U_SNLOC ))
@@ -3297,7 +3292,7 @@ END DO Loop_Elements
       ALLOCATE( SUM_CV( CV_NONODS ))
       ALLOCATE( UP_WIND_NOD( CV_NONODS * NPHASE ))
 
-      ALLOCATE( INV_JAC( NDIM, NDIM, SCVNGI ) )
+      ALLOCATE(INV_JAC(NDIM, NDIM, SCVNGI ))
 
       UP_WIND_NOD = 0.0
 
@@ -3384,9 +3379,6 @@ END DO Loop_Elements
       ALLOCATE( XC_CV( CV_NONODS ))
       ALLOCATE( YC_CV( CV_NONODS ))
       ALLOCATE( ZC_CV( CV_NONODS ))
-      ALLOCATE( DTX_ELE( CV_NLOC, NPHASE,TOTELE ))
-      ALLOCATE( DTY_ELE( CV_NLOC, NPHASE,TOTELE ))
-      ALLOCATE( DTZ_ELE( CV_NLOC, NPHASE,TOTELE ))
 
       ewrite(3,*)'here2'
 
@@ -3614,9 +3606,6 @@ END DO Loop_Elements
 
 !                  Loop_IPHASE: DO IPHASE = 1, NPHASE
 
-!                     CV_NODI_IPHA = CV_NODI + ( IPHASE - 1 ) * CV_NONODS
-!                     CV_NODJ_IPHA = CV_NODJ + ( IPHASE - 1 ) * CV_NONODS
-
                      NFACE_ITS=1
                      !IF((CV_ELE_TYPE==2).AND.(CV_NONODS==TOTELE*CV_NLOC)) NFACE_ITS=2
                      DO FACE_ITS = 1, NFACE_ITS
@@ -3629,9 +3618,9 @@ END DO Loop_Elements
                                 CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel],order=[3,2,1]),&
+                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]),&
                                 reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel]), &
+                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc]), &
                                 UGI_COEF_ELE, UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -3647,12 +3636,12 @@ END DO Loop_Elements
                                 HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
                                 T, FEMT, DEN, &
                                 U, V, W, NU, NV, NW, &
-                                CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ, &
+                                CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel],order=[3,2,1]), &
+                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
                                 reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel]), &
+                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc],order=[3,2,1]), &
                                 UGI_COEF_ELE,  UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -3664,48 +3653,26 @@ END DO Loop_Elements
                                 IANISOLIM, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
                                 TUPWIND_MAT )
                         ENDIF
-!!$                        if (igot_t2==1) then
-!!$                           CALL GET_INT_VEL( NPHASE, NCOMP, NDOTQNEW, NDOTQOLD, INCOME, &
-!!$                                HDC, GI, IPHASE, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
-!!$                                T2, FEMT2, DEN, &
-!!$                                U, V, W, NU, NV, NW, &
-!!$                                CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ, &
-!!$                                CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
-!!$                                SELE, U_SNLOC, STOTEL, U_SLOC2LOC, SUF_U_BC, SUF_V_BC, SUF_W_BC,WIC_U_BC, &
-!!$                                SUF_SIG_DIAGTEN_BC, WIC_U_BC_DIRICHLET, &
-!!$                                UGI_COEF_ELE, VGI_COEF_ELE, WGI_COEF_ELE, UGI_COEF_ELE2, VGI_COEF_ELE2, WGI_COEF_ELE2, &
-!!$                                ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
-!!$                                MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
-!!$                                FACE_ITS, LIMT2(iphase,global_face), FEMDGI, FEMT2GI,  UP_WIND_NOD, &
-!!$                                T2MIN, T2MAX,  T2MIN_NOD, T2MAX_NOD, &
-!!$                                IN_ELE_UPWIND, DG_ELE_UPWIND, &
-!!$                                T2MIN_2ND_MC, T2MAX_2ND_MC, LIMIT_USE_2ND,&
-!!$                                overlapping, &
-!!$                                IANISOLIM, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
-!!$                                T2UPWIND_MAT )
-!!$                        else
-!!$                           
-!!$                           CALL GET_INT_VEL_MPHASE( NPHASE, NCOMP, NDOTQNEW, NDOTQOLD, INCOME, &
-!!$                                HDC, GI, IPHASE, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
-!!$                                T, FEMT, DEN, &
-!!$                                U, V, W, NU, NV, NW, &
-!!$                                CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ, &
-!!$                                CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
-!!$                                SELE, U_SNLOC, STOTEL, U_SLOC2LOC, SUF_U_BC, SUF_V_BC, SUF_W_BC,WIC_U_BC, &
-!!$                                SUF_SIG_DIAGTEN_BC, WIC_U_BC_DIRICHLET, &
-!!$                                UGI_COEF_ELE, VGI_COEF_ELE, WGI_COEF_ELE, UGI_COEF_ELE2, VGI_COEF_ELE2, WGI_COEF_ELE2, &
-!!$                                ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
-!!$                                MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
-!!$                                FACE_ITS, LIMT(iphase,global_face), FEMDGI, FEMTGI,  UP_WIND_NOD, &
-!!$                                TMIN, TMAX,  TMIN_NOD, TMAX_NOD, &
-!!$                                IN_ELE_UPWIND, DG_ELE_UPWIND, &
-!!$                                TMIN_2ND_MC, TMAX_2ND_MC, LIMIT_USE_2ND,&
-!!$                                overlapping, &
-!!$                                IANISOLIM, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
-!!$                                TUPWIND_MAT )
-!!$                         end if
                         !================= ESTIMATE THE FACE VALUE OF THE SUB-CV ===============
                         ! Calculate T and DEN on the CV face at quadrature point GI.
+
+                        IF ( IANISOLIM == 1 ) THEN
+                           IF( CV_NODJ /= CV_NODI ) THEN
+                              DO COUNT = SMALL_FINDRM(CV_NODJ), SMALL_FINDRM(CV_NODJ+1)-1
+                                 IF ( SMALL_COLM(COUNT) == CV_NODI ) THEN
+                                    TUPWIN = TUPWIND_MAT(:,:, COUNT )
+                                    EXIT
+                                 END IF
+                              END DO
+                              DO COUNT = SMALL_FINDRM(CV_NODI), SMALL_FINDRM(CV_NODI+1)-1
+                                 IF ( SMALL_COLM(COUNT) == CV_NODJ ) THEN
+                                    TUPWI2 = TUPWIND_MAT(:,:, COUNT )
+                                    EXIT
+                                 END IF
+                              END DO
+                           END IF
+                        END IF
+
 
                         CALL GET_INT_T_DEN( FVT, FVT2, FVD, LIMD(:,:,global_face),&
                              LIMT(:,:,global_face), LIMT2(:,:,global_face), &
@@ -3731,31 +3698,6 @@ END DO Loop_Elements
                              TUPWIN, TUPWI2, &
                              !Values to limit the flow when reaching the irreducible  saturation for a phase
                              s_gc, s_or )
-
-!!$                        CALL GET_INT_T_DEN_mphase( FVT, FVT2, FVD, LIMD(:,:,global_face),&
-!!$                             LIMT(:,:,global_face), LIMT2(:,:,global_face), &
-!!$                             LIMDT(:,:,global_face), LIMDTT2(:,:,global_face),&
-!!$                             FEMDGI, FEMTGI,FEMT2GI, &
-!!$                             CV_DISOPT, CV_NONODS, NPHASE, CV_NODI_IPHA, CV_NODJ_IPHA, ELE, ELE2, GI, IPHASE,  &
-!!$                             CV_NLOC, TOTELE, CV_NDGLN, CV_OTHER_LOC, SCVNGI, SCVFEN, INCOME, &
-!!$                             T, T2, DEN, FEMT, FEMT2, FEMDEN, &
-!!$                             TMIN, T2MIN, DENMIN, &
-!!$                             TMAX, T2MAX, DENMAX, &
-!!$                             SELE, CV_SNLOC, STOTEL, CV_SLOC2LOC, SUF_T_BC, SUF_T2_BC, SUF_D_BC, &
-!!$                             WIC_T_BC, WIC_T2_BC, WIC_D_BC, &
-!!$                             WIC_T_BC_DIRICHLET, WIC_D_BC_DIRICHLET, ONE_PORE, &
-!!$                             MASS_CV, TMIN_NOD, TMAX_NOD, &
-!!$                             DENMIN_NOD, DENMAX_NOD, &
-!!$                             T2MIN_NOD, T2MAX_NOD, IGOT_T2, &
-!!$                             TMIN_2ND_MC, T2MIN_2ND_MC, DENMIN_2ND_MC, &
-!!$                             TMAX_2ND_MC, T2MAX_2ND_MC, DENMAX_2ND_MC, &
-!!$                             LIMIT_USE_2ND, HDC, NDOTQ, DT, &
-!!$                             SCVFENX, SCVFENY, SCVFENZ, CVNORMX, CVNORMY, CVNORMZ, &
-!!$                             U,V,W, U_NDGLN,U_NLOC,U_NONODS,NDIM,SUFEN, INV_JAC, &
-!!$                             IANISOLIM, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
-!!$                             TUPWIND_MAT, DENUPWIND_MAT, T2UPWIND_MAT, &
-!!$                             !Values to limit the flow when reaching the irreducible  saturation for a phase
-!!$                             s_gc, s_or )
                      end DO
                end IF Conditional_integration
             end DO Loop_GCOUNT
@@ -3774,9 +3716,6 @@ END DO Loop_Elements
       DEALLOCATE( XC_CV)
       DEALLOCATE( YC_CV)
       DEALLOCATE( ZC_CV)
-      DEALLOCATE( DTX_ELE)
-      DEALLOCATE( DTY_ELE)
-      DEALLOCATE( DTZ_ELE)   
 
       DEALLOCATE( TMIN )
       DEALLOCATE( TMAX )
@@ -3808,14 +3747,10 @@ END DO Loop_Elements
       DEALLOCATE( COLGPTS ) !The size of this vector is over-estimated
       DEALLOCATE( FINDGPTS )
       DEALLOCATE( SNDOTQ )
-      DEALLOCATE( SNDOTQOLD )
       DEALLOCATE( CV_ON_FACE )
       DEALLOCATE( CVFEM_ON_FACE )
       DEALLOCATE( U_ON_FACE )
       DEALLOCATE( UFEM_ON_FACE )
-      DEALLOCATE( CV_OTHER_LOC )
-      DEALLOCATE( U_OTHER_LOC )
-      DEALLOCATE( MAT_OTHER_LOC )
       DEALLOCATE( X_SHARE )
       DEALLOCATE( CVWEIGHT )
       DEALLOCATE( CVN )
@@ -3871,7 +3806,6 @@ END DO Loop_Elements
       DEALLOCATE( SBUFENLX)
       DEALLOCATE( SBUFENLY)
       DEALLOCATE( SBUFENLZ)
-      DEALLOCATE( DUMMY_ZERO_NDIM_NDIM)
 
       DEALLOCATE( CV_SLOC2LOC)
       DEALLOCATE( U_SLOC2LOC)
@@ -3885,8 +3819,7 @@ END DO Loop_Elements
   
       DEALLOCATE( SUM_CV)
       DEALLOCATE( UP_WIND_NOD)
-
-      DEALLOCATE( INV_JAC )
+      DEALLOCATE(INV_JAC)
 
     end SUBROUTINE CV_GET_ALL_LIMITED_VALS
 
@@ -4847,7 +4780,7 @@ END DO Loop_Elements
 
     ! determine FEMT (finite element wise) etc from T (control volume wise) 
     IMPLICIT NONE
-    type( state_type ), dimension( : ), intent( in ) :: state
+    type( state_type ), dimension( : ), intent( inout ), pointer :: state
     INTEGER, intent( in ) :: NDIM, NPHASE, NCOMP, CV_NONODS, TOTELE, X_NLOC, CV_NGI, CV_NLOC, &
          X_NONODS, NCOLM, IGOT_T2, IGETCT, NCOLCMC
     INTEGER, DIMENSION( : ), intent( in ) :: CV_NDGLN
@@ -8905,7 +8838,7 @@ pure function mtolfun(value)
        HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
        T, FEMT, DEN, &
        U, V, W, NU, NV, NW, &
-       CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ,  &
+       CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ,  &
        CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
        SELE, U_SNLOC,STOTEL, U_SLOC2LOC, SUF_U_BC, WIC_U_BC, &
        SUF_SIG_DIAGTEN_BC, &
@@ -8922,13 +8855,13 @@ pure function mtolfun(value)
     ! Calculate NDOTQ and INCOME on the CV boundary at quadrature pt GI. 
     IMPLICIT NONE
     INTEGER, intent( in ) :: NPHASE, GI, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, &
-         CV_NODJ_IPHA, CV_NODI_IPHA, CV_DG_VEL_INT_OPT, ELE, ELE2, &
+         CV_NODJ, CV_NODI, CV_DG_VEL_INT_OPT, ELE, ELE2, &
          SELE, U_SNLOC, STOTEL, CV_ELE_TYPE, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, &
          NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NONODS, FACE_ITS, &
          IN_ELE_UPWIND, DG_ELE_UPWIND
     REAL, intent( in ) :: HDC
     REAL, intent( in ), dimension(:,:) :: LIMT, FEMDGI, FEMTGI
-    REAL, intent( inout ), dimension(nphase) :: NDOTQNEW,NDOTQ, INCOME
+    REAL, intent( inout ), dimension(:) :: NDOTQNEW,NDOTQ, INCOME
     INTEGER, DIMENSION( : ), intent( in ) :: U_NDGLN
     INTEGER, DIMENSION( : ), intent( in ) :: U_OTHER_LOC
     INTEGER, DIMENSION( : ), intent( in ) :: U_SLOC2LOC
@@ -8963,13 +8896,19 @@ pure function mtolfun(value)
     logical, INTENT (IN) :: is_overlapping   
     INTEGER :: U_NLOC_LEV,U_KLOC_LEV,U_KLOC,U_NODK_IPHA, U_KLOC2, U_NODK2, iphase
     integer, dimension(u_nloc) :: u_nodes
+    real, dimension(:), allocatable :: lu
+
 
     IF( is_overlapping ) THEN
+       allocate(lu(u_nonods*nphase*ndim))
+       lu(1:u_nonods*nphase)=nu
+       if (ndim>=2) lu(u_nonods*nphase+1:2*u_nonods*nphase)=nv
+       if (ndim==3) lu(2*u_nonods*nphase+1:3*u_nonods*nphase)=nw
        ! For overlapping basis function approach.
        CALL GET_INT_VEL_OVERLAP( NPHASE, 1, NDOTQ, INCOME,  &
             HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
-            T, FEMT, DEN,reshape([nu,nv,nw],[ndim,nphase,u_nonods],order=[3,2,1]), &
-            CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ,  &
+            T, FEMT, DEN,reshape(lu,[ndim,nphase,u_nonods],order=[3,2,1]), &
+            CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ,  &
             CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
             SELE, U_SNLOC,STOTEL, U_SLOC2LOC, SUF_U_BC, WIC_U_BC, &
             SUF_SIG_DIAGTEN_BC, &
@@ -8982,11 +8921,12 @@ pure function mtolfun(value)
             TMIN_2ND_MC, TMAX_2ND_MC,  LIMIT_USE_2ND, &
             IANISOTROPIC, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
             TUPWIND_MAT )
+       DEALLOCATE(LU)
     ELSE
        CALL GET_INT_VEL_ORIG( NPHASE, NDOTQ, INCOME, &
             HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
             T(1,:,:), FEMT(1,:,:), DEN(1,:,:), NU, NV, NW, &
-            CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ,  &
+            CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ,  &
             CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
             SELE, U_SNLOC,STOTEL, U_SLOC2LOC,&
             [SUF_U_BC(1,:,:)], [SUF_U_BC(2,:,:)], [SUF_U_BC(3,:,:)], WIC_U_BC, &
@@ -9035,1052 +8975,6 @@ pure function mtolfun(value)
 
     contains
 
-
-      PURE SUBROUTINE GET_INT_VEL_OVERLAP( NPHASE,NCOMP, NDOTQ,INCOME, &
-       HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
-       T, FEMT, DEN, NU,&
-       CV_NODI_IPHA, CV_NODJ_IPHA, CVNORMX, CVNORMY, CVNORMZ,  &
-       CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
-       SELE, U_SNLOC, STOTEL, U_SLOC2LOC, SUF_U_BC, WIC_U_BC, &
-       SUF_SIG_DIAGTEN_BC, &
-       UGI_COEF_ELE, UGI_COEF_ELE2,  &
-       VOLFRA_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
-       MASS_CV,OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
-       FACE_ITS, LIMT, FEMDGI, FEMTGI, UP_WIND_NOD, &
-       TMIN, TMAX, TMIN_NOD, TMAX_NOD, &
-       IN_ELE_UPWIND, DG_ELE_UPWIND, &
-       TMIN_2ND_MC, TMAX_2ND_MC,  LIMIT_USE_2ND, &
-       IANISOTROPIC, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
-       TUPWIND_MAT)
-    !================= ESTIMATE THE FACE VALUE OF THE SUB-CV ===
-    ! Calculate NDOTQ and INCOME on the CV boundary at quadrature pt GI. 
-    ! it assumes an overlapping decomposition approach for velocity. 
-    IMPLICIT NONE
-    INTEGER, intent( in ) :: NPHASE, NCOMP, GI, U_NLOC, CV_SNLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, &
-         CV_NODJ_IPHA, CV_NODI_IPHA, CV_DG_VEL_INT_OPT, ELE, ELE2, &
-         SELE, U_SNLOC, STOTEL, CV_ELE_TYPE, CV_NLOC, CV_ILOC, CV_JLOC, &
-         NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NONODS, FACE_ITS, &
-         IN_ELE_UPWIND, DG_ELE_UPWIND
-    REAL, intent( in ) :: HDC, LIMT(:,:), FEMDGI(:,:), FEMTGI(:,:)
-    real, intent( inout ),  dimension(nphase) :: INCOME, NDOTQ 
-    INTEGER, DIMENSION( : ), intent( in ) :: U_NDGLN
-    INTEGER, DIMENSION( : ), intent( in ) :: U_OTHER_LOC
-    INTEGER, DIMENSION( : ), intent( in ) :: U_SLOC2LOC
-    INTEGER, DIMENSION( : ,:), intent( in ) :: WIC_U_BC
-    INTEGER, DIMENSION( :,:,: ), intent( in ) :: TMIN_NOD, TMAX_NOD
-    REAL, DIMENSION( :, :  ), intent( in ) :: SUFEN
-    REAL, DIMENSION( :, : , : ), intent( in ) :: T, FEMT, DEN
-    REAL, DIMENSION( :,:, :  ), intent( in ) :: NU
-    REAL, DIMENSION( : ), intent( in ) :: CVNORMX, CVNORMY, CVNORMZ
-    REAL, DIMENSION( : , : , : ), intent( in ) :: SUF_U_BC
-    REAL, DIMENSION( : , :,: ), intent( in ) :: SUF_SIG_DIAGTEN_BC
-    REAL, DIMENSION( :,:,: ), intent( inout ) :: UGI_COEF_ELE, &
-         UGI_COEF_ELE2
-    REAL, DIMENSION( :  ), intent( in ) :: VOLFRA_PORE
-    REAL, DIMENSION( : , :  ), intent( in ) :: SCVFEN
-    INTEGER, DIMENSION( : ), intent( in ) :: CV_NDGLN
-    INTEGER, DIMENSION( : ), intent( in ) :: CV_OTHER_LOC
-    INTEGER, DIMENSION( : ), intent( in ) :: CV_SLOC2LOC
-    REAL, DIMENSION( :  ), intent( in ) :: MASS_CV
-    REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
-    INTEGER, DIMENSION( : ), intent( in ) :: MAT_NDGLN
-    REAL, DIMENSION( :  ), intent( inout ) :: UP_WIND_NOD
-    REAL, DIMENSION( :, :, : ), intent( inout ) :: TMIN, TMAX
-    logical, intent( in ) :: LIMIT_USE_2ND
-    REAL, DIMENSION( : ,:,: ), intent( inout ) :: TMAX_2ND_MC, TMIN_2ND_MC
-
-      INTEGER, intent( in ) :: IANISOTROPIC
-      INTEGER, intent( in ) :: NSMALL_COLM
-      INTEGER, DIMENSION( : ), intent( in ) :: SMALL_FINDRM
-      INTEGER, DIMENSION( : ), intent( in ) :: SMALL_COLM
-      REAL, DIMENSION( :,:,:), intent( in ) :: TUPWIND_MAT
-
-    ! Local variables
-    REAL :: UDGI(ndim,nphase),  &
-         UDGI2(ndim,nphase), DT_I(nphase),DT_J(nphase), &
-         UDGI_INT(ndim,nphase), &
-         NDOTQ_INT(nphase),NDOTQ2(nphase), &
-         FEMTOLDGI_IPHA, OVER_RELAX, ABS_CV_NODI_IPHA(nphase), ABS_CV_NODJ_IPHA(nphase), &
-         GRAD_ABS_CV_NODI_IPHA(nphase), GRAD_ABS_CV_NODJ_IPHA(nphase), V_NODI, G_NODI, V_NODJ, G_NODJ, &
-         GEOMTOLDGI_IPHA, W_UPWIND, W_UPWINDOLD, INCOME3(nphase), INCOME4(nphase), &
-         LIMT3(1,nphase), FEMTGI_IPHA(1,nphase), GEOMTGI(1,nphase), UPWIND_FRAC, TUPWIN(ncomp,nphase), TUPWI2(ncomp,nphase)
-    REAL :: NVEC(3),SUF_SIG_DIAGTEN_BC_GI(ndim,nphase), UGI_TMP(ndim)
-    INTEGER :: U_KLOC,U_NODK,U_NODK2,U_NODK_IPHA,U_KLOC2,U_SKLOC, &
-         U_SNODK,U_SNODK_IPHA, II,  COUNT, &
-         U_KLOC_LEV, U_NLOC_LEV, U_SKLOC_LEV, U_SNLOC_LEV, CV_KLOC, CV_KNOD, &
-         CV_KLOC2, CV_KNOD2, CV_NODI, CV_NODJ, IDIM, JDIM, IJ, MAT_NODI, MAT_NODJ, &
-         CV_SKLOC, CV_SNODK, CV_SNODK_IPHA, CV_STAR_IPHA, icomp, iphase, u_iloc
-    LOGICAL :: CONSERV, MAX_OPER, SAT_BASED, got_dt_ij
-    ! IN_ELE_UPWIND=1 switches on upwinding within and element (=3 recommended).
-    !    INTEGER, PARAMETER :: IN_ELE_UPWIND = 3
-    !    INTEGER, PARAMETER :: IN_ELE_UPWIND = 2
-    ! DG_ELE_UPWIND=1 switches on upwinding between elements (=3 recommended).
-    !    INTEGER, PARAMETER :: DG_ELE_UPWIND = 3
-    !    INTEGER, PARAMETER :: DG_ELE_UPWIND = 2
-    ! FORCE_UPWIND_VEL forces the use of upwinding for velocity - good for testing as high order can be complex. 
-    ! FORCE_UPWIND_VEL_DG_ELE forces upwind vel between elements
-    LOGICAL, PARAMETER :: FORCE_UPWIND_VEL = .false.
-    !      LOGICAL, PARAMETER :: FORCE_UPWIND_VEL = .true.
-    LOGICAL, PARAMETER :: FORCE_UPWIND_VEL_DG_ELE = .true.
-    LOGICAL, PARAMETER :: LIM_VOL_ADJUST2 = .true.
-    ! If ROW_AVE then use a Roe averaged flux between the elements or CV's when ROE_AVE =.true. 
-    LOGICAL, PARAMETER :: ROE_AVE = .false. !.false. !.true.
-    ! limit the volume fraction based on net letting flux go into certain elements for DG between the elements...
-    LOGICAL, PARAMETER :: LIMIT_SAT_BASED_INTERP = .false.
-    ! option for between element velocity calculation...
-    integer, PARAMETER :: between_ele_dg_opt = 5
-    ! limit the volume fraction based on switching to the 1st order scheme for DG between the elements...
-    ! which should be ued with LIMIT_WITHIN_REAL=.true.
-    ! LIMIT_WITHIN_REAL makes sure the saturations are bounded can be used with DG 
-    LOGICAL, PARAMETER :: LIMIT_SAT_BASED_UPWIND = .true.
-    LOGICAL, PARAMETER :: LIMIT_WITHIN_REAL=.false.
-    ! The fracture modelling with the upwind based method for DG... 
-    LOGICAL, PARAMETER :: high_order_upwind_vel_for_dg = .true.
-    LOGICAL :: RESET_STORE, LIM_VOL_ADJUST, enforce_abs(nphase)
-    REAL, dimension(ncomp,nphase) :: TMIN_STORE, TMAX_STORE
-    REAL :: PERM_TILDE,NDOTQ_TILDE(nphase), NDOTQ2_TILDE(nphase), NDOTQOLD_TILDE(nphase), NDOTQOLD2_TILDE(nphase), rden_ave, Q_UNDERLY(nphase)
-    REAL, dimension(nphase) :: NDOTQ_KEEP_IN,  NDOTQ_KEEP, NDOTQ2_KEEP
-    ! coefficients for this element ELE
-    real :: gamma, abs_tilde(nphase), abs_tilde_i(nphase), abs_tilde_j(nphase), abs_max(nphase), abs_min(nphase), w_relax, grad2nd
-    real, dimension(nphase) :: abs_tilde_2nd, abs_tildeold_2nd, max_nodtq_keep, min_nodtq_keep
-    real, dimension(nphase) :: w_weight, relax
-
-    real, DIMENSION(NPHASE) :: DT_I_upwind, DT_J_upwind
-    real :: dt_max, dt_min
-    real, dimension(nphase) :: abs_tilde1, abs_tilde2
-    real, dimension(nphase) :: wrelax, wrelax1, wrelax2
-    real, dimension(1,nphase) :: T_PELE, T_PELEOT, TMIN_PELE, TMAX_PELE, TMIN_PELEOT, TMAX_PELEOT
-    real :: cvnormxv(ndim)
-
-
-    ! print *,'IN_ELE_UPWIND,CV_DG_VEL_INT_OPT,  DG_ELE_UPWIND, IANISOTROPIC:',IN_ELE_UPWIND,CV_DG_VEL_INT_OPT,  DG_ELE_UPWIND, IANISOTROPIC
-    !  stop 8721
-
-    cvnormxv(1)=cvnormx(gi)
-    if (ndim>=2) cvnormxv(2)=cvnormy(gi)
-    if (ndim==3) cvnormxv(3)=cvnormz(gi)
-
-    ! The adjustment method for variable CV volumes is not ready for new limiter method...
-    LIM_VOL_ADJUST = ( LIM_VOL_ADJUST2 .AND. (.NOT.LIMIT_USE_2ND) ) .AND. IANISOTROPIC==0
-
-    UGI_COEF_ELE=0.0
-
-    ! coefficients for this element ELE2
-    UGI_COEF_ELE2=0.0
-
-    U_NLOC_LEV = U_NLOC / CV_NLOC
-    U_SNLOC_LEV = U_SNLOC / CV_NLOC
-
-
-    got_dt_ij=.false.
-
-
-    Conditional_SELE: IF( SELE /= 0 ) THEN ! On the boundary of the domain. 
-       IF( WIC_U_BC( iphase,SELE) /= WIC_U_BC_DIRICHLET ) THEN ! velocity free boundary
-          UDGI = 0.0
-          DO U_KLOC_LEV = 1, U_NLOC_LEV
-             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC ) + (IPHASE-1)*U_NONODS
-             UDGI = UDGI + SUFEN( U_KLOC, GI ) * NU(:,:, U_NODK)
-          END DO
-
-          ! Here we assume that sigma_out/sigma_in is a diagonal matrix 
-          ! which effectively assumes that the anisotropy just inside the domain 
-          ! is the same as just outside the domain. 
-          ! Multiply by a normalized sigma tensor so that we use the 
-          ! sigma from just outside the boundary:
-
-          SUF_SIG_DIAGTEN_BC_GI=0.0
-          DO CV_SKLOC = 1, CV_SNLOC
-             CV_KLOC = CV_SLOC2LOC( CV_SKLOC )
-             IF(CV_KLOC==CV_ILOC) THEN
-                CV_SNODK = ( SELE - 1 ) * CV_SNLOC + CV_SKLOC
-                do iphase=1,nphase
-                   CV_SNODK_IPHA = CV_SNODK + ( IPHASE - 1 ) * STOTEL*CV_SNLOC
-                   SUF_SIG_DIAGTEN_BC_GI( 1:NDIM,IPHASE) = SUF_SIG_DIAGTEN_BC(:,iphase, CV_SNODK )
-                end do
-             ENDIF
-          END DO
-
-          ! Only modify boundary velocity for incoming velocity...
-          UGI_COEF_ELE=0.0
-
-          DO U_KLOC_LEV = 1, U_NLOC_LEV
-             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             do iphase=1,nphase
-                if (dot_product(UDGI(:,iphase),CVNORMXV) .LT.0.0) THEN ! Incomming...
-                   UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)&
-                        +1.0*SUF_SIG_DIAGTEN_BC_GI(:,iphase)
-                ELSE
-                   UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)+1.0
-                ENDIF
-             end do
-          END DO
-
-
-          do iphase=1,nphase
-             IF(dot_product(UDGI(:,iphase),CVNORMXV) .LT.0.0) THEN ! Incomming...
-                UGI_TMP = SUF_SIG_DIAGTEN_BC_GI(:,iphase) * UDGI(:,iphase)
-                UDGI(:,iphase)=UGI_TMP 
-             ENDIF
-          end do
-
-       ELSE ! Specified vel bc.
-          UDGI = 0.0
-          UGI_COEF_ELE=0.0
- 
-          DO U_SKLOC_LEV = 1, U_SNLOC_LEV
-             U_SKLOC = (CV_ILOC-1)*U_SNLOC_LEV + U_SKLOC_LEV
-             U_KLOC = U_SLOC2LOC( U_SKLOC )
-             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
-             U_NODK_IPHA = U_NODK + ( IPHASE - 1 ) * U_NONODS
-             U_SNODK = ( SELE - 1 ) * U_SNLOC + U_SKLOC 
-             U_SNODK_IPHA = U_SNODK + ( IPHASE - 1 ) * STOTEL*U_SNLOC
-             do iphase=1,nphase
-                IF(WIC_U_BC(iphase,SELE) == 10) THEN
-                   UDGI(:,iphase) = UDGI(:,iphase)&
-                        + SUFEN( U_KLOC, GI ) * 0.5 *(NU(:,iphase, U_NODK)+SUF_U_BC( :,iphase,U_SNODK ))
-                   UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)+0.5
-                ELSE
-                   UDGI(:,iphase) = UDGI(:,iphase) + SUFEN( U_KLOC, GI ) * SUF_U_BC(:,iphase, U_SNODK )
-                END IF
-             end do
-          END DO
-       END IF
-
-    ELSE ! Conditional_SELE. Not on the boundary of the domain.
-       Conditional_ELE2: IF(( ELE2 == 0 ).OR.( ELE2 == ELE)) THEN
-          UDGI = 0.0
-          UDGI2 = 0.0
-          DO U_KLOC_LEV = 1, U_NLOC_LEV
-             U_KLOC =(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_KLOC2=(CV_JLOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC ) +(IPHASE-1)*U_NONODS
-             U_NODK2 = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC2 )+(IPHASE-1)*U_NONODS
-
-             UDGI = UDGI + SUFEN( U_KLOC, GI ) * NU(:,:, U_NODK)
-
-             UDGI2 = UDGI2 + SUFEN( U_KLOC2, GI ) * NU(:,:, U_NODK2)
-
-          END DO
-
-          NDOTQ = matmul(cvnormxv,udgi)
-          NDOTQ2 =matmul(cvnormxv,udgi2) 
-          NDOTQ_TILDE = 0.5 * ( NDOTQ +  NDOTQ2 )
-          NDOTQ2_TILDE =   NDOTQ_TILDE
-
-          CV_NODI = CV_NODI_IPHA - (IPHASE-1)*CV_NONODS
-          CV_NODJ = CV_NODJ_IPHA - (IPHASE-1)*CV_NONODS
-
-          IF((IN_ELE_UPWIND==1).OR.FORCE_UPWIND_VEL) THEN
-
-             where (NDOTQ_TILDE < 0.0)
-                INCOME=1.0
-             ELSEwhere
-                INCOME=0.0
-             END where
-
-             where(abs(NDOTQ2 - NDOTQ).lt. 1.e-7) 
-                INCOME=0.5
-             end where
-
-
-
-          ELSE IF(IN_ELE_UPWIND==2) THEN ! the best
-
-             UPWIND_FRAC=0.8
-             where (NDOTQ_TILDE < 0.0) 
-                INCOME=0.8
-                !INCOME= 1.0 - 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODJ)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-             ELSEWHERE
-                INCOME=0.8
-                !INCOME= 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODI)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-             END where
-
-          ELSE IF(IN_ELE_UPWIND==3) THEN ! the best optimal upwind frac.
-
-
-             MAT_NODI=MAT_NDGLN((ELE-1)*MAT_NLOC+CV_ILOC)
-             MAT_NODJ=MAT_NDGLN((ELE-1)*MAT_NLOC+CV_JLOC)
-
-             FEMTGI_ipha=0.0
-             DO CV_KLOC=1,CV_NLOC
-                CV_KNOD=CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
-                FEMTGI_IPHA= FEMTGI_IPHA &
-                     + SCVFEN(CV_KLOC,GI) * FEMT(:,:,CV_KNOD)
-             END DO
-             ! Central is fine as its within an element with equally spaced nodes. 
-             !FEMTGI_IPHA = 0.5*( t(cv_nodi_ipha)+t(cv_nodj_ipha) )
-             !FEMTOLDGI_IPHA = 0.5*( told(cv_nodi_ipha)+told(cv_nodj_ipha) )
-             if(IANISOTROPIC==0) then ! this is the only needed for isotropic limiting for velocity...
-                FEMTGI_IPHA = ( MASS_CV(CV_NODJ) * T(:,:,CV_NODI) + &
-                     MASS_CV(CV_NODI) * T(:,:,CV_NODJ) ) / (MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-             endif
-             GEOMTGI = ( MASS_CV(CV_NODJ) * T(:,:,CV_NODI) + &
-                  MASS_CV(CV_NODI) * T(:,:,CV_NODJ) ) / (MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-
-             NVEC(1)=CVNORMX(GI)
-             NVEC(2)=CVNORMY(GI)
-             NVEC(3)=CVNORMZ(GI)
-             ABS_CV_NODI_IPHA      = 0.0
-             GRAD_ABS_CV_NODI_IPHA = 0.0
-             ABS_CV_NODJ_IPHA      = 0.0
-             GRAD_ABS_CV_NODJ_IPHA = 0.0
-             DO IDIM=1,NDIM
-                V_NODI=0.0
-                G_NODI=0.0
-                V_NODJ=0.0
-                G_NODJ=0.0
-                DO JDIM=1,NDIM
-                   IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODI-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
-                   V_NODI = V_NODI + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
-                   G_NODI = G_NODI + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM) * NVEC(JDIM)
-                   IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODJ-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
-                   V_NODJ = V_NODJ + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
-                   G_NODJ = G_NODJ + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM) * NVEC(JDIM)
-                END DO
-                ABS_CV_NODI_IPHA      = ABS_CV_NODI_IPHA + NVEC(IDIM)*V_NODI
-                GRAD_ABS_CV_NODI_IPHA = GRAD_ABS_CV_NODI_IPHA + NVEC(IDIM)*G_NODI
-                ABS_CV_NODJ_IPHA      = ABS_CV_NODJ_IPHA + NVEC(IDIM)*V_NODJ
-                GRAD_ABS_CV_NODJ_IPHA = GRAD_ABS_CV_NODJ_IPHA + NVEC(IDIM)*G_NODJ
-             END DO
-
-             !        print *,'-iphase,cv_nodi,cv_nodj,ABS_CV_NODI_IPHA,ABS_CV_NODJ_IPHA:',iphase,cv_nodi,cv_nodj,ABS_CV_NODI_IPHA,ABS_CV_NODJ_IPHA
-
-
-
-
-
-             ! Make sure we have some sort of velocity (only needed between elements)...
-             ! take the mean of the underlying velocity...
-             !                        Q_UNDERLY=0.5*( NDOTQ*ABS_CV_NODI_IPHA + NDOTQ2*ABS_CV_NODJ_IPHA )
-             !                        NDOTQ_TILDE =Q_UNDERLY/ABS_CV_NODI_IPHA
-             !                        NDOTQ2_TILDE=Q_UNDERLY/ABS_CV_NODJ_IPHA
-             !
-             !                        QOLD_UNDERLY=0.5*( NDOTQOLD*ABS_CV_NODI_IPHA + NDOTQOLD2*ABS_CV_NODJ_IPHA )
-             !                        NDOTQOLD_TILDE =QOLD_UNDERLY/ABS_CV_NODI_IPHA
-             !                        NDOTQOLD2_TILDE=QOLD_UNDERLY/ABS_CV_NODJ_IPHA
-
-             ! These are the new limits of the velocities...
-             NDOTQ_KEEP  = NDOTQ   ! this is associated with saturation at NODI
-             NDOTQ2_KEEP = NDOTQ2  ! this is associated with saturation at NODJ
-
-             ! between these limits work out which are associated with the flux limited saturation at this interface. 
-
-             if(ROE_AVE) then
-
-                ! do the Roe average of the rest of the velocity...
-                do iphase=1,nphase
-                   NDOTQ_TILDE(iphase)  = ( DEN(1,iphase,CV_NODI) * T(1,iphase,CV_NODI) * NDOTQ(iphase) -  &
-                        &           DEN(1,iphase,CV_NODJ) * T(1,iphase,CV_NODJ) * NDOTQ2(iphase) ) & 
-                        / tolfun( VOLFRA_PORE(ELE)*DEN(1,iphase,CV_NODI) * T(1,iphase,CV_NODI)&
-                        - VOLFRA_PORE(ELE)*DEN(1,iphase,CV_NODJ) * T(1,iphase,CV_NODJ) )
-                NDOTQ2_TILDE = NDOTQ_TILDE
-                end do
-
-                ! Make sure we have some sort of velocity (only needed between elements)...
-
-             endif
-
-
-
-             ! high order order (low order is an option above)
-
-
-
-             where (0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) < 0.0)
-                INCOME3=1.0
-                ! Make sure the fem description is not biased to the downwind...         
-             ELSEwhere
-                INCOME3=0.0
-             END where
-
-             IF ( LIM_VOL_ADJUST ) THEN
-                RESET_STORE=.FALSE. 
-                CALL CAL_LIM_VOL_ADJUST(TMIN_STORE,TMIN,T,TMIN_NOD,RESET_STORE,MASS_CV, &
-                     CV_NODI,CV_NODJ, CV_NONODS, INCOME3 )
-                CALL CAL_LIM_VOL_ADJUST(TMAX_STORE,TMAX,T,TMAX_NOD,RESET_STORE,MASS_CV, &
-                     CV_NODI,CV_NODJ, CV_NONODS, INCOME3 )
-             END IF
-
-
-
-             if(IANISOTROPIC==0) then ! this is the only good isotropic limiting for velocity...
-
-                T_PELE = T( :,:,CV_NODI )
-                IF( CV_NODJ /= CV_NODI ) THEN
-                   T_PELEOT    = T( :,:,CV_NODJ )
-                   TMIN_PELE   = TMIN( :,:,CV_NODI )
-                   TMAX_PELE   = TMAX( :,:,CV_NODI )
-                   TMIN_PELEOT = TMIN( :,:, CV_NODJ )
-                   TMAX_PELEOT = TMAX( :,:,CV_NODJ )
-                END IF
-                CALL ONVDLIMsqrt( CV_NONODS, &
-                     LIMT3, FEMTGI_IPHA, INCOME3, CV_NODI, CV_NODJ, &
-                     T_PELE, T_PELEOT, TMIN_PELE, TMAX_PELE, TMIN_PELEOT, TMAX_PELEOT, .FALSE. , .FALSE. )
-
-
-             else
-
-                CV_STAR_IPHA = 1 + ( IPHASE - 1 ) * CV_NONODS
-                CV_NODI = CV_NODI_IPHA-(IPHASE-1)*CV_NONODS
-                CV_NODJ = CV_NODJ_IPHA-(IPHASE-1)*CV_NONODS
-
-                IF ( IANISOTROPIC == 1 ) THEN
-                   IF( CV_NODI /= CV_NODJ ) THEN
-                      DO COUNT = SMALL_FINDRM(CV_NODJ), SMALL_FINDRM(CV_NODJ+1)-1
-                         IF ( SMALL_COLM(COUNT) == CV_NODI ) THEN
-                            TUPWIN = TUPWIND_MAT( :,:,COUNT )
-                            EXIT
-                         END IF
-                      END DO
-                      DO COUNT = SMALL_FINDRM(CV_NODI), SMALL_FINDRM(CV_NODI+1)-1
-                         IF ( SMALL_COLM(COUNT) == CV_NODJ ) THEN
-                            TUPWI2 = TUPWIND_MAT( :,:,COUNT )
-                            EXIT
-                         END IF
-                      END DO
-                   END IF
-                END IF
-
-                CALL ONVDLIM_ALL( CV_NONODS, &
-                     LIMT3, FEMTGI_IPHA, INCOME3, CV_NODI, CV_NODJ, &
-                     T, TMIN, TMAX, &
-                     TMIN_2ND_MC, TMAX_2ND_MC, .FALSE., .FALSE., LIMIT_USE_2ND, [-1.0], &
-                     IANISOTROPIC, TUPWIN, TUPWI2 )               
-
-             endif
-
-
-
-
-             IF ( LIM_VOL_ADJUST ) THEN
-                RESET_STORE=.TRUE. 
-                CALL CAL_LIM_VOL_ADJUST(TMIN_STORE,TMIN,T,TMIN_NOD,RESET_STORE,MASS_CV, &
-                     CV_NODI,CV_NODJ, CV_NONODS,  INCOME3 )
-                CALL CAL_LIM_VOL_ADJUST(TMAX_STORE,TMAX,T,TMAX_NOD,RESET_STORE,MASS_CV, &
-                     CV_NODI,CV_NODJ, CV_NONODS, INCOME3 )
-             END IF
-
-
-
-
-             abs_tilde_i = ABS_CV_NODI_IPHA
-             abs_tilde_j = ABS_CV_NODJ_IPHA
-
-
-
-
-             ! amend the absorption between abs_tilde and the upwind value...
-             ! ***WITHIN AN ELEMENT****
-
-
-
-             abs_tilde =  0.5*(  ABS_CV_NODI_IPHA  + ( limt3(1,:)   -  T(1,:,CV_NODI)  ) * GRAD_ABS_CV_NODI_IPHA   +   &
-                  ABS_CV_NODJ_IPHA  + ( limt3(1,:)   -  T(1,:,CV_NODJ)  ) * GRAD_ABS_CV_NODJ_IPHA )
-
-
-             abs_max=max(ABS_CV_NODI_IPHA,  ABS_CV_NODJ_IPHA)
-             abs_min=min(ABS_CV_NODI_IPHA,  ABS_CV_NODJ_IPHA)
-
-             abs_tilde    = min(abs_max, max(abs_min,  abs_tilde ))
-
-             NDOTQ_KEEP_IN    =  0.5*( NDOTQ*ABS_CV_NODI_IPHA    + NDOTQ2*ABS_CV_NODJ_IPHA )    /abs_tilde
-
-             DO IPHASE=1,NPHASE
-                INCOME(IPHASE)    = MIN(1.0, MAX(0.0,  (NDOTQ_KEEP_IN(IPHASE) - NDOTQ(IPHASE))/TOLFUN( NDOTQ2(IPHASE) - NDOTQ(IPHASE) ) ))
-             END DO
-             where (abs(NDOTQ2 - NDOTQ).lt. 1.e-7)
-                INCOME=0.5
-             end where
-
-             !                     INCOME =0.5*ABS_CV_NODI_IPHA* MASS_CV(CV_NODI) /(0.5*(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI) +ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ) ))
-             !                     INCOMEOLD =0.5*ABS_CV_NODI_IPHA* MASS_CV(CV_NODI) /(0.5*(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI) +ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ) ))
-
-             !               stop 821
-
-
-
-
-             ! based on switching to the 1st order scheme...
-             if(LIMIT_SAT_BASED_UPWIND) then
-                where( min(ABS_CV_NODI_IPHA,ABS_CV_NODJ_IPHA)/ (ABS_CV_NODI_IPHA+ABS_CV_NODJ_IPHA).lt.1.e-3) ! resort to using the velocity from the highest absorption cell. 
-                   !                 if( ABS_CV_NODI_IPHA+ABS_CV_NODJ_IPHA.gt.1.0e+3 ) then ! resort to using the velocity from the highest absorption cell. 
-                   !  IF(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) < 0.0) THEN 
-                   where(0.5*(NDOTQ+NDOTQ2) < 0.0)
-                      INCOME=1.0
-                   ELSEwhere
-                      INCOME=0.0
-                   END where
-                end where
-             endif
-
-
-
-
-
-          ELSE
-
-             UPWIND_FRAC=0.5
-             where (NDOTQ_TILDE < 0.0)
-                !INCOME=0.8
-                INCOME= 1.0 - 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODJ)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-             ELSEwhere
-                !INCOME=0.2
-                INCOME= 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODI)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-             END where
-             !INCOME=0.5
-          END IF
-
-          UDGI = 0.0
-          UGI_COEF_ELE=0.0
-          DO U_KLOC_LEV = 1, U_NLOC_LEV
-             U_KLOC =(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_KLOC2=(CV_JLOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_NODK  = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
-             U_NODK2 = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC2 )
-
-
-             DO IPHASE=1,NPHASE
-                UDGI(:,iphase) = UDGI(:,iphase)&
-                     + SUFEN( U_KLOC, GI ) * NU( :,iphase,U_NODK) * (1.0-INCOME(iphase)) &
-                     + SUFEN( U_KLOC2, GI ) * NU( :,iphase,U_NODK2 ) * INCOME(iphase) 
-                
-                UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)+1.0-INCOME(iphase)
-                UGI_COEF_ELE(:,iphase,U_KLOC2)=UGI_COEF_ELE(:,iphase,U_KLOC2)+INCOME(iphase)
-
-             END DO
-
-          END DO
-
-
-       ELSE ! Conditional_ELE2: IF( ELE2 /= 0 ) THEN
-
-          UDGI = 0.0
-          UGI_COEF_ELE = 0.0
-          DO U_KLOC_LEV = 1, U_NLOC_LEV
-             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
-
-             UDGI = UDGI + SUFEN( U_KLOC, GI ) * NU(:,:,  U_NODK )
-
-             UGI_COEF_ELE(:,:,U_KLOC)=UGI_COEF_ELE(:,:,U_KLOC)+1.0
-  
-          END DO
-
-          UDGI2 = 0.0
-          UGI_COEF_ELE2 = 0.0
-          DO U_KLOC_LEV = 1, U_NLOC_LEV
-             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
-             U_KLOC2 = U_OTHER_LOC( U_KLOC )
-             IF( U_KLOC2 /= 0 ) THEN
-                U_NODK2 = U_NDGLN((ELE2-1)*U_NLOC+U_KLOC2)
-
-                UDGI2  = UDGI2 + SUFEN( U_KLOC, GI ) * NU(:,:, U_NODK2)
-
-                UGI_COEF_ELE2(:,:,U_KLOC2)=UGI_COEF_ELE2(:,:,U_KLOC2)+1.0
-
-             END IF
-          END DO
-
-          NDOTQ = matmul(cvnormxv,udgi)
-
-          NDOTQ2 = matmul(cvnormxv,udgi2) 
-
-          CV_NODI=CV_NODI_IPHA -(IPHASE-1)*CV_NONODS
-          CV_NODJ=CV_NODJ_IPHA -(IPHASE-1)*CV_NONODS
-
-          IF( ABS( CV_DG_VEL_INT_OPT ) == 1 ) THEN
-             DT_I=1.0
-             DT_J=1.0
-          ELSE IF( ABS(CV_DG_VEL_INT_OPT ) == 2) THEN
-             DT_I=MAX(1.E-2,T( icomp,iphase,CV_NODI ))
-             DT_J=MAX(1.E-2,T( icomp,iphase,CV_NODJ ))
-          ELSE IF( ABS(CV_DG_VEL_INT_OPT ) == 3) THEN
-             DT_I=DEN( icomp,iphase,CV_NODI)*T( icomp,iphase,CV_NODI)
-             DT_J=DEN( icomp,iphase,CV_NODJ)*T( icomp,iphase,CV_NODJ)
-          ELSE IF( ABS(CV_DG_VEL_INT_OPT ) == 4) THEN
-
-
-             ! DG_ELE_UPWIND==1: the upwind method. 
-             ! DG_ELE_UPWIND==3: the best optimal upwind frac.
-
-
-             MAT_NODI=MAT_NDGLN((ELE-1)*MAT_NLOC+CV_ILOC)
-             MAT_NODJ=MAT_NDGLN((ELE2-1)*MAT_NLOC+CV_JLOC)
-
-
-             NVEC(1)=CVNORMX(GI)
-             NVEC(2)=CVNORMY(GI)
-             NVEC(3)=CVNORMZ(GI)
-             ABS_CV_NODI_IPHA      = 0.0
-             GRAD_ABS_CV_NODI_IPHA = 0.0
-             ABS_CV_NODJ_IPHA      = 0.0
-             GRAD_ABS_CV_NODJ_IPHA = 0.0
-             DO IDIM=1,NDIM
-                V_NODI=0.0
-                G_NODI=0.0
-                V_NODJ=0.0
-                G_NODJ=0.0
-                DO JDIM=1,NDIM
-                   IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODI-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
-                   V_NODI = V_NODI + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
-                   G_NODI = G_NODI + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM)*NVEC(JDIM)
-                   IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODJ-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
-                   V_NODJ = V_NODJ + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
-                   G_NODJ = G_NODJ + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM)*NVEC(JDIM)
-                END DO
-                ABS_CV_NODI_IPHA      = ABS_CV_NODI_IPHA + NVEC(IDIM)*V_NODI
-                GRAD_ABS_CV_NODI_IPHA = GRAD_ABS_CV_NODI_IPHA + NVEC(IDIM)*G_NODI
-                ABS_CV_NODJ_IPHA      = ABS_CV_NODJ_IPHA + NVEC(IDIM)*V_NODJ
-                GRAD_ABS_CV_NODJ_IPHA = GRAD_ABS_CV_NODJ_IPHA + NVEC(IDIM)*G_NODJ
-             END DO
-
-
-             ! Make sure we have some sort of velocity (only needed between elements)...
-             ! take the mean of the underlying velocity...
-             if(.false.) then
-                Q_UNDERLY=( NDOTQ*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ NDOTQ2*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ) ) &
-                     /(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
-                NDOTQ_TILDE =Q_UNDERLY/ABS_CV_NODI_IPHA
-                NDOTQ2_TILDE=Q_UNDERLY/ABS_CV_NODJ_IPHA
-
-             else ! better tested option...
-
-                Q_UNDERLY=0.5*( NDOTQ*ABS_CV_NODI_IPHA + NDOTQ2*ABS_CV_NODJ_IPHA )
-                NDOTQ_TILDE =Q_UNDERLY/ABS_CV_NODI_IPHA
-                NDOTQ2_TILDE=Q_UNDERLY/ABS_CV_NODJ_IPHA
-
-             endif
-
-             !   Q_UNDERLY=0.5*( NDOTQ/ABS_CV_NODI_IPHA + NDOTQ2/ABS_CV_NODJ_IPHA )
-             !   NDOTQ_TILDE =Q_UNDERLY*ABS_CV_NODI_IPHA
-             !   NDOTQ2_TILDE=Q_UNDERLY*ABS_CV_NODJ_IPHA
-
-             !   QOLD_UNDERLY=0.5*( NDOTQOLD/ABS_CV_NODI_IPHA + NDOTQOLD2/ABS_CV_NODJ_IPHA )
-             !   NDOTQOLD_TILDE =QOLD_UNDERLY*ABS_CV_NODI_IPHA
-             !   NDOTQOLD2_TILDE=QOLD_UNDERLY*ABS_CV_NODJ_IPHA
-
-             ! These are the new limits of the velocities...
-             NDOTQ_KEEP  = NDOTQ_TILDE   ! this is associated with saturation at NODI
-             NDOTQ2_KEEP = NDOTQ2_TILDE  ! this is associated with saturation at NODJ
-
-             ! between these limits work out which are associated with the flux limited saturation at this interface. 
-
-             if(ROE_AVE) then
-
-                ! do the Roe average of the rest of the velocity...
-                DO IPHASE=1,NPHASE
-                   NDOTQ_TILDE  = ( DEN(1,IPHASE,CV_NODI) * T(1,IPHASE,CV_NODI) * NDOTQ(IPHASE) -  &
-                        &           DEN(1,IPHASE,CV_NODJ) * T(1,IPHASE,CV_NODJ) * NDOTQ2(IPHASE) ) & 
-                        / tolfun( VOLFRA_PORE(ELE)*DEN(1,IPHASE,CV_NODI) * T(1,IPHASE,CV_NODI) &
-                        - VOLFRA_PORE(ELE2)*DEN(1,IPHASE,CV_NODJ) * T(1,IPHASE,CV_NODJ) )
-                END DO
-                   NDOTQ2_TILDE = NDOTQ_TILDE
-
-                ! Make sure we have some sort of velocity (only needed between elements)...
-
-             endif
-
-
-             ! high order dg...
-             IF ( high_order_upwind_vel_for_dg ) THEN ! high order
-
-
-                FEMTGI_IPHA = 0.0
-                FEMTOLDGI_IPHA = 0.0
-                DO CV_KLOC = 1, CV_NLOC
-                   CV_KLOC2 = CV_OTHER_LOC( CV_KLOC )
-                   IF(CV_KLOC2 /= 0 ) THEN
-                      if (.false.) then
-                         CV_KNOD = CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
-                         CV_KNOD2 = CV_NDGLN((ELE2-1)*CV_NLOC+CV_KLOC2)
-                         FEMTGI_IPHA = FEMTGI_IPHA + SCVFEN(CV_KLOC,GI) & 
-                              * 0.5 * ( FEMT(:,:,CV_NONODS) &
-                              + FEMT(:,:,CV_KNOD2) )
-                      end if
-
-                      if (.true.) then
-                         CV_KNOD = CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
-                         CV_KNOD2 = CV_NDGLN((ELE2-1)*CV_NLOC+CV_KLOC2)
-                         where (0.5*(NDOTQ_TILDE+NDOTQ2_TILDE)>0.0)
-                            FEMTGI_IPHA(1,:) = FEMTGI_IPHA(1,:) + SCVFEN(CV_KLOC,GI) &
-                                 * FEMT(1,:,CV_KNOD)
-                         elsewhere
-                            FEMTGI_IPHA(1,:) = FEMTGI_IPHA(1,:) + SCVFEN(CV_KLOC,GI) &
-                                 * FEMT(1,:,CV_KNOD2)
-                         end where
-                      end if
-
-                      if (.false.) then
-                         CV_KNOD = CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
-                         FEMTGI_IPHA = FEMTGI_IPHA &
-                              + SCVFEN(CV_KLOC,GI) * FEMT(:,:,CV_KNOD)
-                      end if
-                   END IF
-                END DO
-
-
-
-                where(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) < 0.0)
-                   INCOME3=1.0
-                ELSEwhere
-                   INCOME3=0.0
-                END where
-
-                ! Between elements...
-
-
-
-
-                ! redefine so that it detects oscillations...
-                abs_tilde1 =  ABS_CV_NODI_IPHA  + 0.5*( T(1,:,CV_NODJ)   -  T(1,:,CV_NODI)  ) * GRAD_ABS_CV_NODI_IPHA   
-                abs_tilde2 =  ABS_CV_NODJ_IPHA  + 0.5*( T(1,:,CV_NODi)   -  T(1,:,CV_NODJ)  ) * GRAD_ABS_CV_NODJ_IPHA 
-
-
-                abs_max=max(ABS_CV_NODI_IPHA,  ABS_CV_NODJ_IPHA)
-                abs_min=min(ABS_CV_NODI_IPHA,  ABS_CV_NODJ_IPHA)
-
-                abs_tilde1    = min(1000.*abs_max, max(0.001*abs_min,  abs_tilde1 )) 
-
-                abs_tilde2    = min(1000.*abs_max, max(0.001*abs_min,  abs_tilde2 )) 
-
-
-
-                got_dt_ij=.true.
-                ! new high order method - works well...
-
-                wrelax= min(  &
-                     ABS_CV_NODI_IPHA/abs_tilde1, abs_tilde1/ABS_CV_NODI_IPHA,   &
-                     ABS_CV_NODJ_IPHA/abs_tilde2, abs_tilde2/ABS_CV_NODJ_IPHA    )
-
-                !     wrelax= min(  &
-                !       ABS_CV_NODI_IPHA/ABS_CV_NODJ_IPHA, ABS_CV_NODJ_IPHA/ABS_CV_NODI_IPHA   )
-
-                if(.true.) then
-                   wrelax1= min( 1.0, abs_tilde1/ABS_CV_NODI_IPHA )
-                   wrelax2= min( 1.0, abs_tilde2/ABS_CV_NODJ_IPHA  )
-                else
-                   wrelax1= min( ABS_CV_NODI_IPHA/abs_tilde1, abs_tilde1/ABS_CV_NODI_IPHA )
-                   wrelax2= min( ABS_CV_NODJ_IPHA/abs_tilde2, abs_tilde2/ABS_CV_NODJ_IPHA  )
-
-                endif
-
-
-                where(income3.lt.0.5) ! flux limit
-                   wrelax2=wrelax1
-                elsewhere
-                   wrelax1=wrelax2
-                end where
-
-
-                ! no 4 (more stable than 2 and 3):
-                if(between_ele_dg_opt==1) then
-                   where ( income3 < 0.5 ) ! upwind
-                      DT_I = (1.-wrelax1)*1.0  + wrelax1*0.5
-                      DT_J = (1.-wrelax2)*0.0  + wrelax2*0.5
-                   elsewhere
-                      DT_I = (1.-wrelax1)*0.0  + wrelax1*0.5
-                      DT_J = (1.-wrelax2)*1.0  + wrelax2*0.5
-                   end where
-
-                else if(between_ele_dg_opt==2) then
-                   ! no 4 (more stable than 2 and 3) (also make sure we dont violate bounds):
-                   where ( income3 < 0.5 ) ! upwind
-                      DT_I = (1.-wrelax1)*1.0  + wrelax1*0.5
-                      DT_J = (1.-wrelax2)*0.0  + wrelax2*0.5
-                      !              IF(T(CV_NODI_IPHA).LT.0.2) THEN
-                      where(ABS_CV_NODI_IPHA.GT.1.0E+10)
-                         DT_I = 0.0
-                         DT_J = 0.0
-                      END where
-                   elsewhere
-                      DT_I = (1.-wrelax1)*0.0  + wrelax1*0.5
-                      DT_J = (1.-wrelax2)*1.0  + wrelax2*0.5
-                      !               IF(T(CV_NODJ_IPHA).LT.0.2) THEN
-                      where(ABS_CV_NODJ_IPHA.GT.1.0E+10)
-                         DT_I = 0.0
-                         DT_J = 0.0
-                      END where
-                   end WHERE
-
-                   ! no 2(again):
-                else if(between_ele_dg_opt==3) then
-                   where ( income3 < 0.5 ) ! upwind
-                      DT_I = (1.-wrelax1)*1.0  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*0.0  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   elsewhere
-                      DT_I = (1.-wrelax1)*0.0  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*1.0  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   end where
-
-
-                   ! no 2(again):
-                else if(between_ele_dg_opt==4) then
-                   where ( income3 < 0.5 )  ! upwind
-                      DT_I = ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      where(ABS_CV_NODI_IPHA.GT.1.0E+10) 
-                         DT_I = 0.0
-                         DT_J = 0.0
-                      END where
-                   elsewhere
-                      DT_I = ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      where(ABS_CV_NODJ_IPHA.GT.1.0E+10)
-                         DT_I = 0.0
-                         DT_J = 0.0
-                      END where
-                   end where
-
-                   ! no 2(again):
-                else if(between_ele_dg_opt==5) then
-                   where ( income3 < 0.5 ) ! upwind
-                      DT_I = (1.-wrelax1)*1.0  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*0.0  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      where(ABS_CV_NODI_IPHA.GT.1.0E+10) 
-                         DT_I = 0.0
-                         DT_J = 0.0
-                      END where
-                   elsewhere
-                      DT_I = (1.-wrelax1)*0.0  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*1.0  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      where(ABS_CV_NODJ_IPHA.GT.1.0E+10) 
-                         DT_I = 0.0
-                         DT_J = 0.0
-                      END where
-                   end where
-                   
-                   ! no 3(again): XXX failed gravity problem...
-                else if(between_ele_dg_opt==6) then
-                   where ( income3 < 0.5 ) ! upwind
-                      DT_I = (1.-wrelax1)*min(1.0,ABS_CV_NODI_IPHA/abs_tilde1)  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*min(1.0,ABS_CV_NODJ_IPHA/abs_tilde1)  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   elsewhere
-                      DT_I = (1.-wrelax1)*min(1.0,ABS_CV_NODI_IPHA/abs_tilde2)  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*min(1.0,ABS_CV_NODJ_IPHA/abs_tilde2)  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   end where
-
-                   ! no 2(again,again) XXXXfor the gravity problem:
-                else if(between_ele_dg_opt==7) then
-                   where ( income3 < 0.5 ) ! upwind
-                      DT_I = (1.-wrelax1)*(1.-min(1.0,ABS_CV_NODJ_IPHA/abs_tilde1))  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*min(1.0,ABS_CV_NODJ_IPHA/abs_tilde1)  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   elsewhere
-                      DT_I = (1.-wrelax1)*min(1.0,ABS_CV_NODI_IPHA/abs_tilde2)  + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                      DT_J = (1.-wrelax2)*(1.-min(1.0,ABS_CV_NODI_IPHA/abs_tilde2))  + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                           /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   end where
-
-                   ! no 3 soln...
-                else if(between_ele_dg_opt==8) then
-                   DT_I = ( (1.-wrelax1)*ABS_CV_NODI_IPHA  ) &
-                        /(ABS_CV_NODI_IPHA+ABS_CV_NODJ_IPHA)   + wrelax1*0.5
-                   DT_J = ( (1.-wrelax2)*ABS_CV_NODJ_IPHA  ) &
-                        /(ABS_CV_NODI_IPHA+ABS_CV_NODJ_IPHA)   + wrelax2*0.5
-
-                   ! no 2 soln...
-                   !        DT_I = ( (1.-wrelax1)*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  ) &
-                   !             /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))   + wrelax1*0.5
-                   !        DT_J = ( (1.-wrelax2)*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  ) &
-                   !             /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))   + wrelax2*0.5
-
-                   !        DTOLD_I = ( (1.-wrelaxold1)*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  ) &
-                   !                /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))  + wrelaxold1*0.5
-                   !        DTOLD_J = ( (1.-wrelaxold2)*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  ) &
-                   !                /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))  + wrelaxold2*0.5
-
-                else if(between_ele_dg_opt==9) then
-                   ! no 0 soln (more stable than 2 & 3)...
-                   DT_I = ( (1.-wrelax1)*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI) + wrelax1*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ) ) &
-                        /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   DT_J = ( (1.-wrelax2)*ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ) + wrelax2*ABS_CV_NODI_IPHA*MASS_CV(CV_NODI) ) &
-                        /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   ! no 0 soln (more stable than 2 & 3)...
-                else if(between_ele_dg_opt==10) then
-                   DT_I = ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ)  &
-                        /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                   DT_J = ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)  &
-                        /(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI)+ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ))
-                endif
-
-
-
-
-
-                ! END OF IF ( DG_ELE_UPWIND==3 ) THEN ...
-             ELSE  ! Low order...
-                !if ( abs(T(CV_NODI_IPHA)-T(CV_NODJ_IPHA)).lt.1.e-4 ) then ! low order
-
-
-                INCOME =0.5*ABS_CV_NODI_IPHA* MASS_CV(CV_NODI) /(0.5*(ABS_CV_NODI_IPHA*MASS_CV(CV_NODI) +ABS_CV_NODJ_IPHA*MASS_CV(CV_NODJ) ))
-
-
-                ! limit the volume fraction based on net letting flux go into certain elements...
-                !     if(.false.) then
-                if(LIMIT_SAT_BASED_INTERP) then
-                   enforce_abs = .false.
-
-                   !  IF(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) >= 0.0) THEN 
-                   IF(0.5*(NDOTQ(1)+NDOTQ2(1)) >= 0.0) THEN 
-                      IF(T(1,1,CV_NODi) < 0.5) then
-                         enforce_abs(2:nphase) = .true.
-                         relax(1)=min( 10.*(0.5-T(1,1,CV_NODi)), 1.0)
-                      ENDIF
-                   ELSE
-                      if (T(1,1,CV_NODJ) < 0.5) then
-                         enforce_abs(2:nphase) = .true. 
-                         relax(1)=min( 10.*(0.5-T(1,1,CV_NODJ)), 1.0)
-                      END IF
-                   ENDIF
-
-
-                   !  IF(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) >= 0.0) THEN 
-                   where (0.5*(NDOTQ(2:nphase)+NDOTQ2(2:nphase)) >= 0.0)
-                      where(T(1,2:nphase,CV_NODi) < 0.5) 
-                         enforce_abs = .true.
-                         relax(2:nphase)=min( 10.*(0.5-T(1,2:nphase,CV_NODi)), 1.0)
-                      END where
-                   ELSEwhere
-                      where(T(1,2:nphase,CV_NODj) < 0.5)
-                         enforce_abs = .true. 
-                         relax(2:nphase)=min( 10.*(0.5-T(1,2:nphase,CV_NODJ)), 1.0)
-                      END where
-                   END where
-            
-
-
-
-                   if(any(enforce_abs)) then
-                      INCOME =  (1.-RELAX)*INCOME  + RELAX*( (1.-INCOME)**2 *(1. - 3.*INCOME) +  INCOME*(1.-INCOME)*(1.+3.*INCOME)  ) ! non-lumped
-                   endif
-
-                   income=min(1.0, max(0.0, income))
-                endif
-
-
-
-
-
-                ! endof IF ( DG_ELE_UPWIND==3 ) THEN ELSE...
-             ENDIF
-
-
-
-
-
-
-
-
-             if(.not.got_dt_ij) then
-
-                DT_I = 1.0 - INCOME
-                DT_J = 1.0 - DT_I
-
-             endif
-
-
-          END IF
-
-
-
-          ! Amend weighting for porosity only across elements...
-          IF((ABS(CV_DG_VEL_INT_OPT ) == 2).OR.(ABS(CV_DG_VEL_INT_OPT ) == 3)) THEN 
-             IF(ELE /= ELE2) THEN 
-                DT_I=VOLFRA_PORE(ELE) *DT_I
-                DT_J=VOLFRA_PORE(ELE2)*DT_J
-             END IF
-          END IF
-
-          !dt_i=0.5
-          !dt_j=0.5
-          !dtold_i=0.5
-          !dtold_j=0.5
-
-          if(.not.got_dt_ij) then ! normalize...
-
-             DT_I_upwind = DT_I
-             DT_J_upwind = DT_J
-
-             DT_I =  DT_I_upwind/(DT_I_upwind+DT_J_upwind)
-             DT_J =  DT_J_upwind/(DT_I_upwind+DT_J_upwind)
-
-          else
-             income=income3
-          endif
-
-
-
-
-          do iphase=1,nphase
-             UDGI_INT(:,iphase) = ( DT_I(iphase) * UDGI(:,iphase) + DT_J(iphase) * UDGI2(:,iphase) ) 
-          end do
-
-          IF( CV_DG_VEL_INT_OPT < 0 ) THEN
-   !          FLAbort('2821') ! should not be going in here??
-   !          if(got_dt_ij) FLAbort('2611') ! we can not use these CV_DG_VEL_INT_OPT < 0, got_dt_ij=.true. options together.
-
-             NDOTQ_INT = matmul(CVNORMXV, UDGI_INT)
-
-             where( NDOTQ_INT <= 0.0 ) ! Incoming
-                !DT_I=1.0
-                DT_J=DT_I+DT_J
-             ELSEwhere
-                DT_I=DT_I+DT_J
-                !DT_J=1.0
-             END where
-
-             do iphase=1,nphase
-                UDGI_INT(:,iphase) = ( DT_I(iphase) * UDGI(:,iphase) + DT_J(iphase) * UDGI2(:,iphase) ) / (DT_I(iphase) + DT_J(iphase))
-             end do
-          END IF
-
-          UDGI  = UDGI_INT 
-
-
-          forall (iphase=1:nphase,u_iloc=1:u_nloc)
-             UGI_COEF_ELE(:,iphase,u_iloc)=DT_I(iphase) * UGI_COEF_ELE(:,iphase,u_iloc) 
-
-             UGI_COEF_ELE2(:,iphase,u_iloc)=DT_J(iphase) * UGI_COEF_ELE2(:,iphase,u_iloc) 
-          end forall
-
-
-       END IF Conditional_ELE2
-
-    END IF Conditional_SELE
-
-    NDOTQ = matmul(cvnormxv,udgi)
-
-    ! Define whether flux is incoming or outgoing, depending on direction of flow
-    INCOME = 1.
-    where( NDOTQ >= 0. ) 
-       INCOME = 0.
-    end where
-    !  IF( NDOTQ_tilde >= 0. ) INCOME = 0.
-    !IF( NDOTQ > 0. ) INCOME = 0.
-
-    RETURN  
-
-  END SUBROUTINE GET_INT_VEL_OVERLAP
 
 
 
@@ -10276,10 +9170,1050 @@ pure function mtolfun(value)
 end SUBROUTINE GET_INT_VEL
 
 
-  Pure SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
+      PURE SUBROUTINE GET_INT_VEL_OVERLAP( NPHASE,NCOMP, NDOTQ,INCOME, &
+       HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
+       T, FEMT, DEN, NU,&
+       CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ,  &
+       CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
+       SELE, U_SNLOC, STOTEL, U_SLOC2LOC, SUF_U_BC, WIC_U_BC, &
+       SUF_SIG_DIAGTEN_BC, &
+       UGI_COEF_ELE, UGI_COEF_ELE2,  &
+       VOLFRA_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
+       MASS_CV,OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
+       FACE_ITS, LIMT, FEMDGI, FEMTGI, UP_WIND_NOD, &
+       TMIN, TMAX, TMIN_NOD, TMAX_NOD, &
+       IN_ELE_UPWIND, DG_ELE_UPWIND, &
+       TMIN_2ND_MC, TMAX_2ND_MC,  LIMIT_USE_2ND, &
+       IANISOTROPIC, SMALL_FINDRM, SMALL_COLM, NSMALL_COLM, &
+       TUPWIND_MAT)
+    !================= ESTIMATE THE FACE VALUE OF THE SUB-CV ===
+    ! Calculate NDOTQ and INCOME on the CV boundary at quadrature pt GI. 
+    ! it assumes an overlapping decomposition approach for velocity. 
+    IMPLICIT NONE
+    INTEGER, intent( in ) :: NPHASE, NCOMP, GI, U_NLOC, CV_SNLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, &
+         CV_NODJ, CV_NODI, CV_DG_VEL_INT_OPT, ELE, ELE2, &
+         SELE, U_SNLOC, STOTEL, CV_ELE_TYPE, CV_NLOC, CV_ILOC, CV_JLOC, &
+         NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NONODS, FACE_ITS, &
+         IN_ELE_UPWIND, DG_ELE_UPWIND
+    REAL, intent( in ) :: HDC, LIMT(:,:), FEMDGI(:,:), FEMTGI(:,:)
+    real, intent( inout ),  dimension(:) :: INCOME, NDOTQ 
+    INTEGER, DIMENSION( : ), intent( in ) :: U_NDGLN
+    INTEGER, DIMENSION( : ), intent( in ) :: U_OTHER_LOC
+    INTEGER, DIMENSION( : ), intent( in ) :: U_SLOC2LOC
+    INTEGER, DIMENSION( : ,:), intent( in ) :: WIC_U_BC
+    INTEGER, DIMENSION( :,:,: ), intent( in ) :: TMIN_NOD, TMAX_NOD
+    REAL, DIMENSION( :, :  ), intent( in ) :: SUFEN
+    REAL, DIMENSION( :, : , : ), intent( in ) :: T, FEMT, DEN
+    REAL, DIMENSION( :,:, :  ), intent( in ) :: NU
+    REAL, DIMENSION( : ), intent( in ) :: CVNORMX, CVNORMY, CVNORMZ
+    REAL, DIMENSION( : , : , : ), intent( in ) :: SUF_U_BC
+    REAL, DIMENSION( : , :,: ), intent( in ) :: SUF_SIG_DIAGTEN_BC
+    REAL, DIMENSION( :,:,: ), intent( inout ) :: UGI_COEF_ELE, &
+         UGI_COEF_ELE2
+    REAL, DIMENSION( :  ), intent( in ) :: VOLFRA_PORE
+    REAL, DIMENSION( : , :  ), intent( in ) :: SCVFEN
+    INTEGER, DIMENSION( : ), intent( in ) :: CV_NDGLN
+    INTEGER, DIMENSION( : ), intent( in ) :: CV_OTHER_LOC
+    INTEGER, DIMENSION( : ), intent( in ) :: CV_SLOC2LOC
+    REAL, DIMENSION( :  ), intent( in ) :: MASS_CV
+    REAL, DIMENSION( : ), intent( in ) :: OPT_VEL_UPWIND_COEFS
+    INTEGER, DIMENSION( : ), intent( in ) :: MAT_NDGLN
+    REAL, DIMENSION( :  ), intent( inout ) :: UP_WIND_NOD
+    REAL, DIMENSION( :, :, : ), intent( inout ) :: TMIN, TMAX
+    logical, intent( in ) :: LIMIT_USE_2ND
+    REAL, DIMENSION( : ,:,: ), intent( inout ) :: TMAX_2ND_MC, TMIN_2ND_MC
+
+      INTEGER, intent( in ) :: IANISOTROPIC
+      INTEGER, intent( in ) :: NSMALL_COLM
+      INTEGER, DIMENSION( : ), intent( in ) :: SMALL_FINDRM
+      INTEGER, DIMENSION( : ), intent( in ) :: SMALL_COLM
+      REAL, DIMENSION( :,:,:), intent( in ) :: TUPWIND_MAT
+
+    ! Local variables
+    REAL :: UDGI(ndim,nphase),  &
+         UDGI2(ndim,nphase), DT_I(nphase),DT_J(nphase), &
+         UDGI_INT(ndim,nphase), &
+         NDOTQ_INT(nphase),NDOTQ2(nphase), &
+         FEMTOLDGI_IPHA, OVER_RELAX, ABS_CV_NODI(nphase), ABS_CV_NODJ(nphase), &
+         GRAD_ABS_CV_NODI(nphase), GRAD_ABS_CV_NODJ(nphase), V_NODI, G_NODI, V_NODJ, G_NODJ, &
+         GEOMTOLDGI_IPHA, W_UPWIND, W_UPWINDOLD, INCOME3(nphase), INCOME4(nphase), &
+         LIMT3(1,nphase), FEMTGI_IPHA(1,nphase), GEOMTGI(1,nphase), UPWIND_FRAC, TUPWIN(ncomp,nphase), TUPWI2(ncomp,nphase)
+    REAL :: NVEC(3),SUF_SIG_DIAGTEN_BC_GI(ndim,nphase), UGI_TMP(ndim)
+    INTEGER :: U_KLOC,U_NODK,U_NODK2,U_NODK_IPHA,U_KLOC2,U_SKLOC, &
+         U_SNODK,U_SNODK_IPHA, II,  COUNT, &
+         U_KLOC_LEV, U_NLOC_LEV, U_SKLOC_LEV, U_SNLOC_LEV, CV_KLOC, CV_KNOD, &
+         CV_KLOC2, CV_KNOD2, IDIM, JDIM, IJ, MAT_NODI, MAT_NODJ, &
+         CV_SKLOC, CV_SNODK, CV_SNODK_IPHA, CV_STAR_IPHA, icomp, iphase, u_iloc
+    LOGICAL :: CONSERV, MAX_OPER, SAT_BASED, got_dt_ij
+    ! IN_ELE_UPWIND=1 switches on upwinding within and element (=3 recommended).
+    !    INTEGER, PARAMETER :: IN_ELE_UPWIND = 3
+    !    INTEGER, PARAMETER :: IN_ELE_UPWIND = 2
+    ! DG_ELE_UPWIND=1 switches on upwinding between elements (=3 recommended).
+    !    INTEGER, PARAMETER :: DG_ELE_UPWIND = 3
+    !    INTEGER, PARAMETER :: DG_ELE_UPWIND = 2
+    ! FORCE_UPWIND_VEL forces the use of upwinding for velocity - good for testing as high order can be complex. 
+    ! FORCE_UPWIND_VEL_DG_ELE forces upwind vel between elements
+    LOGICAL, PARAMETER :: FORCE_UPWIND_VEL = .false.
+    !      LOGICAL, PARAMETER :: FORCE_UPWIND_VEL = .true.
+    LOGICAL, PARAMETER :: FORCE_UPWIND_VEL_DG_ELE = .true.
+    LOGICAL, PARAMETER :: LIM_VOL_ADJUST2 = .true.
+    ! If ROW_AVE then use a Roe averaged flux between the elements or CV's when ROE_AVE =.true. 
+    LOGICAL, PARAMETER :: ROE_AVE = .false. !.false. !.true.
+    ! limit the volume fraction based on net letting flux go into certain elements for DG between the elements...
+    LOGICAL, PARAMETER :: LIMIT_SAT_BASED_INTERP = .false.
+    ! option for between element velocity calculation...
+    integer, PARAMETER :: between_ele_dg_opt = 5
+    ! limit the volume fraction based on switching to the 1st order scheme for DG between the elements...
+    ! which should be ued with LIMIT_WITHIN_REAL=.true.
+    ! LIMIT_WITHIN_REAL makes sure the saturations are bounded can be used with DG 
+    LOGICAL, PARAMETER :: LIMIT_SAT_BASED_UPWIND = .true.
+    LOGICAL, PARAMETER :: LIMIT_WITHIN_REAL=.false.
+    ! The fracture modelling with the upwind based method for DG... 
+    LOGICAL, PARAMETER :: high_order_upwind_vel_for_dg = .true.
+    LOGICAL :: RESET_STORE, LIM_VOL_ADJUST, enforce_abs(nphase)
+    REAL, dimension(ncomp,nphase) :: TMIN_STORE, TMAX_STORE
+    REAL :: PERM_TILDE,NDOTQ_TILDE(nphase), NDOTQ2_TILDE(nphase), NDOTQOLD_TILDE(nphase), NDOTQOLD2_TILDE(nphase), rden_ave, Q_UNDERLY(nphase)
+    REAL, dimension(nphase) :: NDOTQ_KEEP_IN,  NDOTQ_KEEP, NDOTQ2_KEEP
+    ! coefficients for this element ELE
+    real :: gamma, abs_tilde(nphase), abs_tilde_i(nphase), abs_tilde_j(nphase), abs_max(nphase), abs_min(nphase), w_relax, grad2nd
+    real, dimension(nphase) :: abs_tilde_2nd, abs_tildeold_2nd, max_nodtq_keep, min_nodtq_keep
+    real, dimension(nphase) :: w_weight, relax
+
+    real, DIMENSION(NPHASE) :: DT_I_upwind, DT_J_upwind
+    real :: dt_max, dt_min
+    real, dimension(nphase) :: abs_tilde1, abs_tilde2
+    real, dimension(nphase) :: wrelax, wrelax1, wrelax2
+    real, dimension(1,nphase) :: T_PELE, T_PELEOT, TMIN_PELE, TMAX_PELE, TMIN_PELEOT, TMAX_PELEOT
+    real :: cvnormxv(ndim)
+
+
+    ! print *,'IN_ELE_UPWIND,CV_DG_VEL_INT_OPT,  DG_ELE_UPWIND, IANISOTROPIC:',IN_ELE_UPWIND,CV_DG_VEL_INT_OPT,  DG_ELE_UPWIND, IANISOTROPIC
+    !  stop 8721
+
+    cvnormxv(1)=cvnormx(gi)
+    if (ndim>=2) cvnormxv(2)=cvnormy(gi)
+    if (ndim==3) cvnormxv(3)=cvnormz(gi)
+
+    ! The adjustment method for variable CV volumes is not ready for new limiter method...
+    LIM_VOL_ADJUST = ( LIM_VOL_ADJUST2 .AND. (.NOT.LIMIT_USE_2ND) ) .AND. IANISOTROPIC==0
+
+    UGI_COEF_ELE=0.0
+
+    ! coefficients for this element ELE2
+    UGI_COEF_ELE2=0.0
+
+    U_NLOC_LEV = U_NLOC / CV_NLOC
+    U_SNLOC_LEV = U_SNLOC / CV_NLOC
+
+
+    got_dt_ij=.false.
+
+
+    Conditional_SELE: IF( SELE /= 0 ) THEN ! On the boundary of the domain. 
+       IF( WIC_U_BC( iphase,SELE) /= WIC_U_BC_DIRICHLET ) THEN ! velocity free boundary
+          UDGI = 0.0
+          DO U_KLOC_LEV = 1, U_NLOC_LEV
+             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC ) + (IPHASE-1)*U_NONODS
+             UDGI = UDGI + SUFEN( U_KLOC, GI ) * NU(:,:, U_NODK)
+          END DO
+
+          ! Here we assume that sigma_out/sigma_in is a diagonal matrix 
+          ! which effectively assumes that the anisotropy just inside the domain 
+          ! is the same as just outside the domain. 
+          ! Multiply by a normalized sigma tensor so that we use the 
+          ! sigma from just outside the boundary:
+
+          SUF_SIG_DIAGTEN_BC_GI=0.0
+          DO CV_SKLOC = 1, CV_SNLOC
+             CV_KLOC = CV_SLOC2LOC( CV_SKLOC )
+             IF(CV_KLOC==CV_ILOC) THEN
+                CV_SNODK = ( SELE - 1 ) * CV_SNLOC + CV_SKLOC
+                do iphase=1,nphase
+                   SUF_SIG_DIAGTEN_BC_GI( 1:NDIM,IPHASE) = SUF_SIG_DIAGTEN_BC(:,iphase, CV_SNODK )
+                end do
+             ENDIF
+          END DO
+
+          ! Only modify boundary velocity for incoming velocity...
+          UGI_COEF_ELE=0.0
+
+          DO U_KLOC_LEV = 1, U_NLOC_LEV
+             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             do iphase=1,nphase
+                if (dot_product(UDGI(:,iphase),CVNORMXV) .LT.0.0) THEN ! Incomming...
+                   UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)&
+                        +1.0*SUF_SIG_DIAGTEN_BC_GI(:,iphase)
+                ELSE
+                   UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)+1.0
+                ENDIF
+             end do
+          END DO
+
+
+          do iphase=1,nphase
+             IF(dot_product(UDGI(:,iphase),CVNORMXV) .LT.0.0) THEN ! Incomming...
+                UGI_TMP = SUF_SIG_DIAGTEN_BC_GI(:,iphase) * UDGI(:,iphase)
+                UDGI(:,iphase)=UGI_TMP 
+             ENDIF
+          end do
+
+       ELSE ! Specified vel bc.
+          UDGI = 0.0
+          UGI_COEF_ELE=0.0
+ 
+          DO U_SKLOC_LEV = 1, U_SNLOC_LEV
+             U_SKLOC = (CV_ILOC-1)*U_SNLOC_LEV + U_SKLOC_LEV
+             U_KLOC = U_SLOC2LOC( U_SKLOC )
+             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
+             U_NODK_IPHA = U_NODK + ( IPHASE - 1 ) * U_NONODS
+             U_SNODK = ( SELE - 1 ) * U_SNLOC + U_SKLOC 
+             U_SNODK_IPHA = U_SNODK + ( IPHASE - 1 ) * STOTEL*U_SNLOC
+             do iphase=1,nphase
+                IF(WIC_U_BC(iphase,SELE) == 10) THEN
+                   UDGI(:,iphase) = UDGI(:,iphase)&
+                        + SUFEN( U_KLOC, GI ) * 0.5 *(NU(:,iphase, U_NODK)+SUF_U_BC( :,iphase,U_SNODK ))
+                   UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)+0.5
+                ELSE
+                   UDGI(:,iphase) = UDGI(:,iphase) + SUFEN( U_KLOC, GI ) * SUF_U_BC(:,iphase, U_SNODK )
+                END IF
+             end do
+          END DO
+       END IF
+
+    ELSE ! Conditional_SELE. Not on the boundary of the domain.
+       Conditional_ELE2: IF(( ELE2 == 0 ).OR.( ELE2 == ELE)) THEN
+          UDGI = 0.0
+          UDGI2 = 0.0
+          DO U_KLOC_LEV = 1, U_NLOC_LEV
+             U_KLOC =(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_KLOC2=(CV_JLOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
+             U_NODK2 = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC2 )
+
+             UDGI = UDGI + SUFEN( U_KLOC, GI ) * NU(:,:, U_NODK)
+
+             UDGI2 = UDGI2 + SUFEN( U_KLOC2, GI ) * NU(:,:, U_NODK2)
+
+          END DO
+
+          NDOTQ = matmul(cvnormxv,udgi)
+          NDOTQ2 =matmul(cvnormxv,udgi2) 
+          NDOTQ_TILDE = 0.5 * ( NDOTQ +  NDOTQ2 )
+          NDOTQ2_TILDE =   NDOTQ_TILDE
+
+
+          IF((IN_ELE_UPWIND==1).OR.FORCE_UPWIND_VEL) THEN
+
+             where (NDOTQ_TILDE < 0.0)
+                INCOME=1.0
+             ELSEwhere
+                INCOME=0.0
+             END where
+
+             where(abs(NDOTQ2 - NDOTQ).lt. 1.e-7) 
+                INCOME=0.5
+             end where
+
+
+
+          ELSE IF(IN_ELE_UPWIND==2) THEN ! the best
+
+             UPWIND_FRAC=0.8
+             where (NDOTQ_TILDE < 0.0) 
+                INCOME=0.8
+                !INCOME= 1.0 - 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODJ)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+             ELSEWHERE
+                INCOME=0.8
+                !INCOME= 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODI)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+             END where
+
+          ELSE IF(IN_ELE_UPWIND==3) THEN ! the best optimal upwind frac.
+
+
+             MAT_NODI=MAT_NDGLN((ELE-1)*MAT_NLOC+CV_ILOC)
+             MAT_NODJ=MAT_NDGLN((ELE-1)*MAT_NLOC+CV_JLOC)
+
+             FEMTGI_ipha=0.0
+             DO CV_KLOC=1,CV_NLOC
+                CV_KNOD=CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
+                FEMTGI_IPHA= FEMTGI_IPHA &
+                     + SCVFEN(CV_KLOC,GI) * FEMT(:,:,CV_KNOD)
+             END DO
+             ! Central is fine as its within an element with equally spaced nodes. 
+             !FEMTGI_IPHA = 0.5*( t(cv_nodi_ipha)+t(cv_nodj_ipha) )
+             !FEMTOLDGI_IPHA = 0.5*( told(cv_nodi_ipha)+told(cv_nodj_ipha) )
+             if(IANISOTROPIC==0) then ! this is the only needed for isotropic limiting for velocity...
+                FEMTGI_IPHA = ( MASS_CV(CV_NODJ) * T(:,:,CV_NODI) + &
+                     MASS_CV(CV_NODI) * T(:,:,CV_NODJ) ) / (MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+             endif
+             GEOMTGI = ( MASS_CV(CV_NODJ) * T(:,:,CV_NODI) + &
+                  MASS_CV(CV_NODI) * T(:,:,CV_NODJ) ) / (MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+
+             NVEC(1)=CVNORMX(GI)
+             NVEC(2)=CVNORMY(GI)
+             NVEC(3)=CVNORMZ(GI)
+             ABS_CV_NODI      = 0.0
+             GRAD_ABS_CV_NODI = 0.0
+             ABS_CV_NODJ      = 0.0
+             GRAD_ABS_CV_NODJ = 0.0
+             DO IDIM=1,NDIM
+                V_NODI=0.0
+                G_NODI=0.0
+                V_NODJ=0.0
+                G_NODJ=0.0
+                DO JDIM=1,NDIM
+                   IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODI-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
+                   V_NODI = V_NODI + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
+                   G_NODI = G_NODI + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM) * NVEC(JDIM)
+                   IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODJ-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
+                   V_NODJ = V_NODJ + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
+                   G_NODJ = G_NODJ + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM) * NVEC(JDIM)
+                END DO
+                ABS_CV_NODI      = ABS_CV_NODI + NVEC(IDIM)*V_NODI
+                GRAD_ABS_CV_NODI = GRAD_ABS_CV_NODI + NVEC(IDIM)*G_NODI
+                ABS_CV_NODJ      = ABS_CV_NODJ + NVEC(IDIM)*V_NODJ
+                GRAD_ABS_CV_NODJ = GRAD_ABS_CV_NODJ + NVEC(IDIM)*G_NODJ
+             END DO
+
+             !        print *,'-iphase,cv_nodi,cv_nodj,ABS_CV_NODI,ABS_CV_NODJ:',iphase,cv_nodi,cv_nodj,ABS_CV_NODI,ABS_CV_NODJ
+
+
+
+
+
+             ! Make sure we have some sort of velocity (only needed between elements)...
+             ! take the mean of the underlying velocity...
+             !                        Q_UNDERLY=0.5*( NDOTQ*ABS_CV_NODI + NDOTQ2*ABS_CV_NODJ )
+             !                        NDOTQ_TILDE =Q_UNDERLY/ABS_CV_NODI
+             !                        NDOTQ2_TILDE=Q_UNDERLY/ABS_CV_NODJ
+             !
+             !                        QOLD_UNDERLY=0.5*( NDOTQOLD*ABS_CV_NODI + NDOTQOLD2*ABS_CV_NODJ )
+             !                        NDOTQOLD_TILDE =QOLD_UNDERLY/ABS_CV_NODI
+             !                        NDOTQOLD2_TILDE=QOLD_UNDERLY/ABS_CV_NODJ
+
+             ! These are the new limits of the velocities...
+             NDOTQ_KEEP  = NDOTQ   ! this is associated with saturation at NODI
+             NDOTQ2_KEEP = NDOTQ2  ! this is associated with saturation at NODJ
+
+             ! between these limits work out which are associated with the flux limited saturation at this interface. 
+
+             if(ROE_AVE) then
+
+                ! do the Roe average of the rest of the velocity...
+                do iphase=1,nphase
+                   NDOTQ_TILDE(iphase)  = ( DEN(1,iphase,CV_NODI) * T(1,iphase,CV_NODI) * NDOTQ(iphase) -  &
+                        &           DEN(1,iphase,CV_NODJ) * T(1,iphase,CV_NODJ) * NDOTQ2(iphase) ) & 
+                        / tolfun( VOLFRA_PORE(ELE)*DEN(1,iphase,CV_NODI) * T(1,iphase,CV_NODI)&
+                        - VOLFRA_PORE(ELE)*DEN(1,iphase,CV_NODJ) * T(1,iphase,CV_NODJ) )
+                NDOTQ2_TILDE = NDOTQ_TILDE
+                end do
+
+                ! Make sure we have some sort of velocity (only needed between elements)...
+
+             endif
+
+
+
+             ! high order order (low order is an option above)
+
+
+
+             where (0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) < 0.0)
+                INCOME3=1.0
+                ! Make sure the fem description is not biased to the downwind...         
+             ELSEwhere
+                INCOME3=0.0
+             END where
+
+             IF ( LIM_VOL_ADJUST ) THEN
+                RESET_STORE=.FALSE. 
+                CALL CAL_LIM_VOL_ADJUST(TMIN_STORE,TMIN,T,TMIN_NOD,RESET_STORE,MASS_CV, &
+                     CV_NODI,CV_NODJ, CV_NONODS, INCOME3 )
+                CALL CAL_LIM_VOL_ADJUST(TMAX_STORE,TMAX,T,TMAX_NOD,RESET_STORE,MASS_CV, &
+                     CV_NODI,CV_NODJ, CV_NONODS, INCOME3 )
+             END IF
+
+
+
+             if(IANISOTROPIC==0) then ! this is the only good isotropic limiting for velocity...
+
+                T_PELE = T( :,:,CV_NODI )
+                IF( CV_NODJ /= CV_NODI ) THEN
+                   T_PELEOT    = T( :,:,CV_NODJ )
+                   TMIN_PELE   = TMIN( :,:,CV_NODI )
+                   TMAX_PELE   = TMAX( :,:,CV_NODI )
+                   TMIN_PELEOT = TMIN( :,:, CV_NODJ )
+                   TMAX_PELEOT = TMAX( :,:,CV_NODJ )
+                END IF
+                CALL ONVDLIMsqrt( CV_NONODS, &
+                     LIMT3, FEMTGI_IPHA, INCOME3, CV_NODI, CV_NODJ, &
+                     T_PELE, T_PELEOT, TMIN_PELE, TMAX_PELE, TMIN_PELEOT, TMAX_PELEOT, .FALSE. , .FALSE. )
+
+
+             else
+
+                CV_STAR_IPHA = 1 + ( IPHASE - 1 ) * CV_NONODS
+
+                IF ( IANISOTROPIC == 1 ) THEN
+                   IF( CV_NODI /= CV_NODJ ) THEN
+                      DO COUNT = SMALL_FINDRM(CV_NODJ), SMALL_FINDRM(CV_NODJ+1)-1
+                         IF ( SMALL_COLM(COUNT) == CV_NODI ) THEN
+                            TUPWIN = TUPWIND_MAT( :,:,COUNT )
+                            EXIT
+                         END IF
+                      END DO
+                      DO COUNT = SMALL_FINDRM(CV_NODI), SMALL_FINDRM(CV_NODI+1)-1
+                         IF ( SMALL_COLM(COUNT) == CV_NODJ ) THEN
+                            TUPWI2 = TUPWIND_MAT( :,:,COUNT )
+                            EXIT
+                         END IF
+                      END DO
+                   END IF
+                END IF
+
+                CALL ONVDLIM_ALL( CV_NONODS, &
+                     LIMT3, FEMTGI_IPHA, INCOME3, CV_NODI, CV_NODJ, &
+                     T, TMIN, TMAX, &
+                     TMIN_2ND_MC, TMAX_2ND_MC, .FALSE., .FALSE., LIMIT_USE_2ND, [-1.0], &
+                     IANISOTROPIC, TUPWIN, TUPWI2 )               
+
+             endif
+
+
+
+
+             IF ( LIM_VOL_ADJUST ) THEN
+                RESET_STORE=.TRUE. 
+                CALL CAL_LIM_VOL_ADJUST(TMIN_STORE,TMIN,T,TMIN_NOD,RESET_STORE,MASS_CV, &
+                     CV_NODI,CV_NODJ, CV_NONODS,  INCOME3 )
+                CALL CAL_LIM_VOL_ADJUST(TMAX_STORE,TMAX,T,TMAX_NOD,RESET_STORE,MASS_CV, &
+                     CV_NODI,CV_NODJ, CV_NONODS, INCOME3 )
+             END IF
+
+
+
+
+             abs_tilde_i = ABS_CV_NODI
+             abs_tilde_j = ABS_CV_NODJ
+
+
+
+
+             ! amend the absorption between abs_tilde and the upwind value...
+             ! ***WITHIN AN ELEMENT****
+
+
+
+             abs_tilde =  0.5*(  ABS_CV_NODI  + ( limt3(1,:)   -  T(1,:,CV_NODI)  ) * GRAD_ABS_CV_NODI   +   &
+                  ABS_CV_NODJ  + ( limt3(1,:)   -  T(1,:,CV_NODJ)  ) * GRAD_ABS_CV_NODJ )
+
+
+             abs_max=max(ABS_CV_NODI,  ABS_CV_NODJ)
+             abs_min=min(ABS_CV_NODI,  ABS_CV_NODJ)
+
+             abs_tilde    = min(abs_max, max(abs_min,  abs_tilde ))
+
+             NDOTQ_KEEP_IN    =  0.5*( NDOTQ*ABS_CV_NODI    + NDOTQ2*ABS_CV_NODJ )    /abs_tilde
+
+             DO IPHASE=1,NPHASE
+                INCOME(IPHASE)    = MIN(1.0, MAX(0.0,  (NDOTQ_KEEP_IN(IPHASE) - NDOTQ(IPHASE))/TOLFUN( NDOTQ2(IPHASE) - NDOTQ(IPHASE) ) ))
+             END DO
+             where (abs(NDOTQ2 - NDOTQ).lt. 1.e-7)
+                INCOME=0.5
+             end where
+
+             !                     INCOME =0.5*ABS_CV_NODI* MASS_CV(CV_NODI) /(0.5*(ABS_CV_NODI*MASS_CV(CV_NODI) +ABS_CV_NODJ*MASS_CV(CV_NODJ) ))
+             !                     INCOMEOLD =0.5*ABS_CV_NODI* MASS_CV(CV_NODI) /(0.5*(ABS_CV_NODI*MASS_CV(CV_NODI) +ABS_CV_NODJ*MASS_CV(CV_NODJ) ))
+
+             !               stop 821
+
+
+
+
+             ! based on switching to the 1st order scheme...
+             if(LIMIT_SAT_BASED_UPWIND) then
+                where( min(ABS_CV_NODI,ABS_CV_NODJ)/ (ABS_CV_NODI+ABS_CV_NODJ).lt.1.e-3) ! resort to using the velocity from the highest absorption cell. 
+                   !                 if( ABS_CV_NODI+ABS_CV_NODJ.gt.1.0e+3 ) then ! resort to using the velocity from the highest absorption cell. 
+                   !  IF(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) < 0.0) THEN 
+                   where(0.5*(NDOTQ+NDOTQ2) < 0.0)
+                      INCOME=1.0
+                   ELSEwhere
+                      INCOME=0.0
+                   END where
+                end where
+             endif
+
+
+
+
+
+          ELSE
+
+             UPWIND_FRAC=0.5
+             where (NDOTQ_TILDE < 0.0)
+                !INCOME=0.8
+                INCOME= 1.0 - 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODJ)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+             ELSEwhere
+                !INCOME=0.2
+                INCOME= 2.*(1.-UPWIND_FRAC)*MASS_CV(CV_NODI)/(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+             END where
+             !INCOME=0.5
+          END IF
+
+          UDGI = 0.0
+          UGI_COEF_ELE=0.0
+          DO U_KLOC_LEV = 1, U_NLOC_LEV
+             U_KLOC =(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_KLOC2=(CV_JLOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_NODK  = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
+             U_NODK2 = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC2 )
+
+
+             DO IPHASE=1,NPHASE
+                UDGI(:,iphase) = UDGI(:,iphase)&
+                     + SUFEN( U_KLOC, GI ) * NU( :,iphase,U_NODK) * (1.0-INCOME(iphase)) &
+                     + SUFEN( U_KLOC2, GI ) * NU( :,iphase,U_NODK2 ) * INCOME(iphase) 
+                
+                UGI_COEF_ELE(:,iphase,U_KLOC)=UGI_COEF_ELE(:,iphase,U_KLOC)+1.0-INCOME(iphase)
+                UGI_COEF_ELE(:,iphase,U_KLOC2)=UGI_COEF_ELE(:,iphase,U_KLOC2)+INCOME(iphase)
+
+             END DO
+
+          END DO
+
+
+       ELSE ! Conditional_ELE2: IF( ELE2 /= 0 ) THEN
+
+          UDGI = 0.0
+          UGI_COEF_ELE = 0.0
+          DO U_KLOC_LEV = 1, U_NLOC_LEV
+             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC )
+
+             UDGI = UDGI + SUFEN( U_KLOC, GI ) * NU(:,:,  U_NODK )
+
+             UGI_COEF_ELE(:,:,U_KLOC)=UGI_COEF_ELE(:,:,U_KLOC)+1.0
+  
+          END DO
+
+          UDGI2 = 0.0
+          UGI_COEF_ELE2 = 0.0
+          DO U_KLOC_LEV = 1, U_NLOC_LEV
+             U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
+             U_KLOC2 = U_OTHER_LOC( U_KLOC )
+             IF( U_KLOC2 /= 0 ) THEN
+                U_NODK2 = U_NDGLN((ELE2-1)*U_NLOC+U_KLOC2)
+
+                UDGI2  = UDGI2 + SUFEN( U_KLOC, GI ) * NU(:,:, U_NODK2)
+
+                UGI_COEF_ELE2(:,:,U_KLOC2)=UGI_COEF_ELE2(:,:,U_KLOC2)+1.0
+
+             END IF
+          END DO
+
+          NDOTQ = matmul(cvnormxv,udgi)
+
+          NDOTQ2 = matmul(cvnormxv,udgi2) 
+
+          IF( ABS( CV_DG_VEL_INT_OPT ) == 1 ) THEN
+             DT_I=1.0
+             DT_J=1.0
+          ELSE IF( ABS(CV_DG_VEL_INT_OPT ) == 2) THEN
+             DT_I=MAX(1.E-2,T( icomp,iphase,CV_NODI ))
+             DT_J=MAX(1.E-2,T( icomp,iphase,CV_NODJ ))
+          ELSE IF( ABS(CV_DG_VEL_INT_OPT ) == 3) THEN
+             DT_I=DEN( icomp,iphase,CV_NODI)*T( icomp,iphase,CV_NODI)
+             DT_J=DEN( icomp,iphase,CV_NODJ)*T( icomp,iphase,CV_NODJ)
+          ELSE IF( ABS(CV_DG_VEL_INT_OPT ) == 4) THEN
+
+
+             ! DG_ELE_UPWIND==1: the upwind method. 
+             ! DG_ELE_UPWIND==3: the best optimal upwind frac.
+
+
+             MAT_NODI=MAT_NDGLN((ELE-1)*MAT_NLOC+CV_ILOC)
+             MAT_NODJ=MAT_NDGLN((ELE2-1)*MAT_NLOC+CV_JLOC)
+
+
+             NVEC(1)=CVNORMX(GI)
+             NVEC(2)=CVNORMY(GI)
+             NVEC(3)=CVNORMZ(GI)
+             ABS_CV_NODI      = 0.0
+             GRAD_ABS_CV_NODI = 0.0
+             ABS_CV_NODJ      = 0.0
+             GRAD_ABS_CV_NODJ = 0.0
+             do iphase=1,nphase
+                DO IDIM=1,NDIM
+                   V_NODI=0.0
+                   G_NODI=0.0
+                   V_NODJ=0.0
+                   G_NODJ=0.0
+                   DO JDIM=1,NDIM
+                      IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODI-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
+                      V_NODI = V_NODI + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
+                      G_NODI = G_NODI + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM)*NVEC(JDIM)
+                      IJ=(IPHASE-1)*MAT_NONODS*NDIM*NDIM + (MAT_NODJ-1)*NDIM*NDIM + (IDIM-1)*NDIM +JDIM
+                      V_NODJ = V_NODJ + OPT_VEL_UPWIND_COEFS(IJ) * NVEC(JDIM)
+                      G_NODJ = G_NODJ + OPT_VEL_UPWIND_COEFS(IJ+NPHASE*MAT_NONODS*NDIM*NDIM)*NVEC(JDIM)
+                   END DO
+                   ABS_CV_NODI(iphase)      = ABS_CV_NODI(iphase) + NVEC(IDIM)*V_NODI
+                   GRAD_ABS_CV_NODI(iphase) = GRAD_ABS_CV_NODI(iphase) + NVEC(IDIM)*G_NODI
+                   ABS_CV_NODJ(iphase)      = ABS_CV_NODJ(iphase) + NVEC(IDIM)*V_NODJ
+                   GRAD_ABS_CV_NODJ(iphase) = GRAD_ABS_CV_NODJ(iphase) + NVEC(IDIM)*G_NODJ
+                END DO
+             end do
+
+
+             ! Make sure we have some sort of velocity (only needed between elements)...
+             ! take the mean of the underlying velocity...
+             if(.false.) then
+                Q_UNDERLY=( NDOTQ*ABS_CV_NODI*MASS_CV(CV_NODI)+ NDOTQ2*ABS_CV_NODJ*MASS_CV(CV_NODJ) ) &
+                     /(MASS_CV(CV_NODI)+MASS_CV(CV_NODJ))
+                NDOTQ_TILDE =Q_UNDERLY/ABS_CV_NODI
+                NDOTQ2_TILDE=Q_UNDERLY/ABS_CV_NODJ
+
+             else ! better tested option...
+
+                Q_UNDERLY=0.5*( NDOTQ*ABS_CV_NODI + NDOTQ2*ABS_CV_NODJ )
+                NDOTQ_TILDE =Q_UNDERLY/ABS_CV_NODI
+                NDOTQ2_TILDE=Q_UNDERLY/ABS_CV_NODJ
+
+             endif
+
+             !   Q_UNDERLY=0.5*( NDOTQ/ABS_CV_NODI + NDOTQ2/ABS_CV_NODJ )
+             !   NDOTQ_TILDE =Q_UNDERLY*ABS_CV_NODI
+             !   NDOTQ2_TILDE=Q_UNDERLY*ABS_CV_NODJ
+
+             !   QOLD_UNDERLY=0.5*( NDOTQOLD/ABS_CV_NODI + NDOTQOLD2/ABS_CV_NODJ )
+             !   NDOTQOLD_TILDE =QOLD_UNDERLY*ABS_CV_NODI
+             !   NDOTQOLD2_TILDE=QOLD_UNDERLY*ABS_CV_NODJ
+
+             ! These are the new limits of the velocities...
+             NDOTQ_KEEP  = NDOTQ_TILDE   ! this is associated with saturation at NODI
+             NDOTQ2_KEEP = NDOTQ2_TILDE  ! this is associated with saturation at NODJ
+
+             ! between these limits work out which are associated with the flux limited saturation at this interface. 
+
+             if(ROE_AVE) then
+
+                ! do the Roe average of the rest of the velocity...
+                DO IPHASE=1,NPHASE
+                   NDOTQ_TILDE  = ( DEN(1,IPHASE,CV_NODI) * T(1,IPHASE,CV_NODI) * NDOTQ(IPHASE) -  &
+                        &           DEN(1,IPHASE,CV_NODJ) * T(1,IPHASE,CV_NODJ) * NDOTQ2(IPHASE) ) & 
+                        / tolfun( VOLFRA_PORE(ELE)*DEN(1,IPHASE,CV_NODI) * T(1,IPHASE,CV_NODI) &
+                        - VOLFRA_PORE(ELE2)*DEN(1,IPHASE,CV_NODJ) * T(1,IPHASE,CV_NODJ) )
+                END DO
+                   NDOTQ2_TILDE = NDOTQ_TILDE
+
+                ! Make sure we have some sort of velocity (only needed between elements)...
+
+             endif
+
+
+             ! high order dg...
+             IF ( high_order_upwind_vel_for_dg ) THEN ! high order
+
+
+                FEMTGI_IPHA = 0.0
+                FEMTOLDGI_IPHA = 0.0
+                DO CV_KLOC = 1, CV_NLOC
+                   CV_KLOC2 = CV_OTHER_LOC( CV_KLOC )
+                   IF(CV_KLOC2 /= 0 ) THEN
+                      if (.false.) then
+                         CV_KNOD = CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
+                         CV_KNOD2 = CV_NDGLN((ELE2-1)*CV_NLOC+CV_KLOC2)
+                         FEMTGI_IPHA = FEMTGI_IPHA + SCVFEN(CV_KLOC,GI) & 
+                              * 0.5 * ( FEMT(:,:,CV_NONODS) &
+                              + FEMT(:,:,CV_KNOD2) )
+                      end if
+
+                      if (.true.) then
+                         CV_KNOD = CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
+                         CV_KNOD2 = CV_NDGLN((ELE2-1)*CV_NLOC+CV_KLOC2)
+                         where (0.5*(NDOTQ_TILDE+NDOTQ2_TILDE)>0.0)
+                            FEMTGI_IPHA(1,:) = FEMTGI_IPHA(1,:) + SCVFEN(CV_KLOC,GI) &
+                                 * FEMT(1,:,CV_KNOD)
+                         elsewhere
+                            FEMTGI_IPHA(1,:) = FEMTGI_IPHA(1,:) + SCVFEN(CV_KLOC,GI) &
+                                 * FEMT(1,:,CV_KNOD2)
+                         end where
+                      end if
+
+                      if (.false.) then
+                         CV_KNOD = CV_NDGLN((ELE-1)*CV_NLOC+CV_KLOC)
+                         FEMTGI_IPHA = FEMTGI_IPHA &
+                              + SCVFEN(CV_KLOC,GI) * FEMT(:,:,CV_KNOD)
+                      end if
+                   END IF
+                END DO
+
+
+
+                where(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) < 0.0)
+                   INCOME3=1.0
+                ELSEwhere
+                   INCOME3=0.0
+                END where
+
+                ! Between elements...
+
+
+
+
+                ! redefine so that it detects oscillations...
+                abs_tilde1 =  ABS_CV_NODI  + 0.5*( T(1,:,CV_NODJ)   -  T(1,:,CV_NODI)  ) * GRAD_ABS_CV_NODI   
+                abs_tilde2 =  ABS_CV_NODJ  + 0.5*( T(1,:,CV_NODi)   -  T(1,:,CV_NODJ)  ) * GRAD_ABS_CV_NODJ
+
+
+                abs_max=max(ABS_CV_NODI,  ABS_CV_NODJ)
+                abs_min=min(ABS_CV_NODI,  ABS_CV_NODJ)
+
+                abs_tilde1    = min(1000.*abs_max, max(0.001*abs_min,  abs_tilde1 )) 
+
+                abs_tilde2    = min(1000.*abs_max, max(0.001*abs_min,  abs_tilde2 )) 
+
+
+
+                got_dt_ij=.true.
+                ! new high order method - works well...
+
+                wrelax= min(  &
+                     ABS_CV_NODI/abs_tilde1, abs_tilde1/ABS_CV_NODI,   &
+                     ABS_CV_NODJ/abs_tilde2, abs_tilde2/ABS_CV_NODJ    )
+
+                !     wrelax= min(  &
+                !       ABS_CV_NODI/ABS_CV_NODJ, ABS_CV_NODJ/ABS_CV_NODI   )
+
+                if(.true.) then
+                   wrelax1= min( 1.0, abs_tilde1/ABS_CV_NODI )
+                   wrelax2= min( 1.0, abs_tilde2/ABS_CV_NODJ )
+                else
+                   wrelax1= min( ABS_CV_NODI/abs_tilde1, abs_tilde1/ABS_CV_NODI )
+                   wrelax2= min( ABS_CV_NODJ/abs_tilde2, abs_tilde2/ABS_CV_NODJ  )
+
+                endif
+
+
+                where(income3.lt.0.5) ! flux limit
+                   wrelax2=wrelax1
+                elsewhere
+                   wrelax1=wrelax2
+                end where
+
+
+                ! no 4 (more stable than 2 and 3):
+                if(between_ele_dg_opt==1) then
+                   where ( income3 < 0.5 ) ! upwind
+                      DT_I = (1.-wrelax1)*1.0  + wrelax1*0.5
+                      DT_J = (1.-wrelax2)*0.0  + wrelax2*0.5
+                   elsewhere
+                      DT_I = (1.-wrelax1)*0.0  + wrelax1*0.5
+                      DT_J = (1.-wrelax2)*1.0  + wrelax2*0.5
+                   end where
+
+                else if(between_ele_dg_opt==2) then
+                   ! no 4 (more stable than 2 and 3) (also make sure we dont violate bounds):
+                   where ( income3 < 0.5 ) ! upwind
+                      DT_I = (1.-wrelax1)*1.0  + wrelax1*0.5
+                      DT_J = (1.-wrelax2)*0.0  + wrelax2*0.5
+                      !              IF(T(CV_NODI).LT.0.2) THEN
+                      where(ABS_CV_NODI.GT.1.0E+10)
+                         DT_I = 0.0
+                         DT_J = 0.0
+                      END where
+                   elsewhere
+                      DT_I = (1.-wrelax1)*0.0  + wrelax1*0.5
+                      DT_J = (1.-wrelax2)*1.0  + wrelax2*0.5
+                      !               IF(T(CV_NODJ).LT.0.2) THEN
+                      where(ABS_CV_NODJ.GT.1.0E+10)
+                         DT_I = 0.0
+                         DT_J = 0.0
+                      END where
+                   end WHERE
+
+                   ! no 2(again):
+                else if(between_ele_dg_opt==3) then
+                   where ( income3 < 0.5 ) ! upwind
+                      DT_I = (1.-wrelax1)*1.0  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*0.0  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   elsewhere
+                      DT_I = (1.-wrelax1)*0.0  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*1.0  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   end where
+
+
+                   ! no 2(again):
+                else if(between_ele_dg_opt==4) then
+                   where ( income3 < 0.5 )  ! upwind
+                      DT_I = ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      where(ABS_CV_NODI.GT.1.0E+10) 
+                         DT_I = 0.0
+                         DT_J = 0.0
+                      END where
+                   elsewhere
+                      DT_I = ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      where(ABS_CV_NODJ.GT.1.0E+10)
+                         DT_I = 0.0
+                         DT_J = 0.0
+                      END where
+                   end where
+
+                   ! no 2(again):
+                else if(between_ele_dg_opt==5) then
+                   where ( income3 < 0.5 ) ! upwind
+                      DT_I = (1.-wrelax1)*1.0  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*0.0  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      where(ABS_CV_NODI.GT.1.0E+10) 
+                         DT_I = 0.0
+                         DT_J = 0.0
+                      END where
+                   elsewhere
+                      DT_I = (1.-wrelax1)*0.0  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*1.0  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      where(ABS_CV_NODJ.GT.1.0E+10) 
+                         DT_I = 0.0
+                         DT_J = 0.0
+                      END where
+                   end where
+                   
+                   ! no 3(again): XXX failed gravity problem...
+                else if(between_ele_dg_opt==6) then
+                   where ( income3 < 0.5 ) ! upwind
+                      DT_I = (1.-wrelax1)*min(1.0,ABS_CV_NODI/abs_tilde1)  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*min(1.0,ABS_CV_NODJ/abs_tilde1)  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   elsewhere
+                      DT_I = (1.-wrelax1)*min(1.0,ABS_CV_NODI/abs_tilde2)  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*min(1.0,ABS_CV_NODJ/abs_tilde2)  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   end where
+
+                   ! no 2(again,again) XXXXfor the gravity problem:
+                else if(between_ele_dg_opt==7) then
+                   where ( income3 < 0.5 ) ! upwind
+                      DT_I = (1.-wrelax1)*(1.-min(1.0,ABS_CV_NODJ/abs_tilde1))  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*min(1.0,ABS_CV_NODJ/abs_tilde1)  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   elsewhere
+                      DT_I = (1.-wrelax1)*min(1.0,ABS_CV_NODI/abs_tilde2)  + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                      DT_J = (1.-wrelax2)*(1.-min(1.0,ABS_CV_NODI/abs_tilde2))  + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                           /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   end where
+
+                   ! no 3 soln...
+                else if(between_ele_dg_opt==8) then
+                   DT_I = ( (1.-wrelax1)*ABS_CV_NODI  ) &
+                        /(ABS_CV_NODI+ABS_CV_NODJ)   + wrelax1*0.5
+                   DT_J = ( (1.-wrelax2)*ABS_CV_NODJ  ) &
+                        /(ABS_CV_NODI+ABS_CV_NODJ)   + wrelax2*0.5
+
+                   ! no 2 soln...
+                   !        DT_I = ( (1.-wrelax1)*ABS_CV_NODI*MASS_CV(CV_NODI)  ) &
+                   !             /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))   + wrelax1*0.5
+                   !        DT_J = ( (1.-wrelax2)*ABS_CV_NODJ*MASS_CV(CV_NODJ)  ) &
+                   !             /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))   + wrelax2*0.5
+
+                   !        DTOLD_I = ( (1.-wrelaxold1)*ABS_CV_NODI*MASS_CV(CV_NODI)  ) &
+                   !                /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))  + wrelaxold1*0.5
+                   !        DTOLD_J = ( (1.-wrelaxold2)*ABS_CV_NODJ*MASS_CV(CV_NODJ)  ) &
+                   !                /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))  + wrelaxold2*0.5
+
+                else if(between_ele_dg_opt==9) then
+                   ! no 0 soln (more stable than 2 & 3)...
+                   DT_I = ( (1.-wrelax1)*ABS_CV_NODI*MASS_CV(CV_NODI) + wrelax1*ABS_CV_NODJ*MASS_CV(CV_NODJ) ) &
+                        /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   DT_J = ( (1.-wrelax2)*ABS_CV_NODJ*MASS_CV(CV_NODJ) + wrelax2*ABS_CV_NODI*MASS_CV(CV_NODI) ) &
+                        /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   ! no 0 soln (more stable than 2 & 3)...
+                else if(between_ele_dg_opt==10) then
+                   DT_I = ABS_CV_NODJ*MASS_CV(CV_NODJ)  &
+                        /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                   DT_J = ABS_CV_NODI*MASS_CV(CV_NODI)  &
+                        /(ABS_CV_NODI*MASS_CV(CV_NODI)+ABS_CV_NODJ*MASS_CV(CV_NODJ))
+                endif
+
+
+
+
+
+                ! END OF IF ( DG_ELE_UPWIND==3 ) THEN ...
+             ELSE  ! Low order...
+                !if ( abs(T(CV_NODI)-T(CV_NODJ)).lt.1.e-4 ) then ! low order
+
+
+                INCOME =0.5*ABS_CV_NODI* MASS_CV(CV_NODI) /(0.5*(ABS_CV_NODI*MASS_CV(CV_NODI) +ABS_CV_NODJ*MASS_CV(CV_NODJ) ))
+
+
+                ! limit the volume fraction based on net letting flux go into certain elements...
+                !     if(.false.) then
+                if(LIMIT_SAT_BASED_INTERP) then
+                   enforce_abs = .false.
+
+                   !  IF(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) >= 0.0) THEN 
+                   IF(0.5*(NDOTQ(1)+NDOTQ2(1)) >= 0.0) THEN 
+                      IF(T(1,1,CV_NODi) < 0.5) then
+                         enforce_abs(2:nphase) = .true.
+                         relax(1)=min( 10.*(0.5-T(1,1,CV_NODi)), 1.0)
+                      ENDIF
+                   ELSE
+                      if (T(1,1,CV_NODJ) < 0.5) then
+                         enforce_abs(2:nphase) = .true. 
+                         relax(1)=min( 10.*(0.5-T(1,1,CV_NODJ)), 1.0)
+                      END IF
+                   ENDIF
+
+
+                   !  IF(0.5*(NDOTQ_TILDE+NDOTQ2_TILDE) >= 0.0) THEN 
+                   where (0.5*(NDOTQ(2:nphase)+NDOTQ2(2:nphase)) >= 0.0)
+                      where(T(1,2:nphase,CV_NODi) < 0.5) 
+                         enforce_abs = .true.
+                         relax(2:nphase)=min( 10.*(0.5-T(1,2:nphase,CV_NODi)), 1.0)
+                      END where
+                   ELSEwhere
+                      where(T(1,2:nphase,CV_NODj) < 0.5)
+                         enforce_abs = .true. 
+                         relax(2:nphase)=min( 10.*(0.5-T(1,2:nphase,CV_NODJ)), 1.0)
+                      END where
+                   END where
+            
+
+
+
+                   if(any(enforce_abs)) then
+                      INCOME =  (1.-RELAX)*INCOME  + RELAX*( (1.-INCOME)**2 *(1. - 3.*INCOME) +  INCOME*(1.-INCOME)*(1.+3.*INCOME)  ) ! non-lumped
+                   endif
+
+                   income=min(1.0, max(0.0, income))
+                endif
+
+
+
+
+
+                ! endof IF ( DG_ELE_UPWIND==3 ) THEN ELSE...
+             ENDIF
+
+
+
+
+
+
+
+
+             if(.not.got_dt_ij) then
+
+                DT_I = 1.0 - INCOME
+                DT_J = 1.0 - DT_I
+
+             endif
+
+
+          END IF
+
+
+
+          ! Amend weighting for porosity only across elements...
+          IF((ABS(CV_DG_VEL_INT_OPT ) == 2).OR.(ABS(CV_DG_VEL_INT_OPT ) == 3)) THEN 
+             IF(ELE /= ELE2) THEN 
+                DT_I=VOLFRA_PORE(ELE) *DT_I
+                DT_J=VOLFRA_PORE(ELE2)*DT_J
+             END IF
+          END IF
+
+          !dt_i=0.5
+          !dt_j=0.5
+          !dtold_i=0.5
+          !dtold_j=0.5
+
+          if(.not.got_dt_ij) then ! normalize...
+
+             DT_I_upwind = DT_I
+             DT_J_upwind = DT_J
+
+             DT_I =  DT_I_upwind/(DT_I_upwind+DT_J_upwind)
+             DT_J =  DT_J_upwind/(DT_I_upwind+DT_J_upwind)
+
+          else
+             income=income3
+          endif
+
+
+
+
+          do iphase=1,nphase
+             UDGI_INT(:,iphase) = ( DT_I(iphase) * UDGI(:,iphase) + DT_J(iphase) * UDGI2(:,iphase) ) 
+          end do
+
+          IF( CV_DG_VEL_INT_OPT < 0 ) THEN
+   !          FLAbort('2821') ! should not be going in here??
+   !          if(got_dt_ij) FLAbort('2611') ! we can not use these CV_DG_VEL_INT_OPT < 0, got_dt_ij=.true. options together.
+
+             NDOTQ_INT = matmul(CVNORMXV, UDGI_INT)
+
+             where( NDOTQ_INT <= 0.0 ) ! Incoming
+                !DT_I=1.0
+                DT_J=DT_I+DT_J
+             ELSEwhere
+                DT_I=DT_I+DT_J
+                !DT_J=1.0
+             END where
+
+             do iphase=1,nphase
+                UDGI_INT(:,iphase) = ( DT_I(iphase) * UDGI(:,iphase) + DT_J(iphase) * UDGI2(:,iphase) ) / (DT_I(iphase) + DT_J(iphase))
+             end do
+          END IF
+
+          UDGI  = UDGI_INT 
+
+
+          forall (iphase=1:nphase,u_iloc=1:u_nloc)
+             UGI_COEF_ELE(:,iphase,u_iloc)=DT_I(iphase) * UGI_COEF_ELE(:,iphase,u_iloc) 
+
+             UGI_COEF_ELE2(:,iphase,u_iloc)=DT_J(iphase) * UGI_COEF_ELE2(:,iphase,u_iloc) 
+          end forall
+
+
+       END IF Conditional_ELE2
+
+    END IF Conditional_SELE
+
+    NDOTQ = matmul(cvnormxv,udgi)
+
+    ! Define whether flux is incoming or outgoing, depending on direction of flow
+    INCOME = 1.
+    where( NDOTQ >= 0. ) 
+       INCOME = 0.
+    end where
+    !  IF( NDOTQ_tilde >= 0. ) INCOME = 0.
+    !IF( NDOTQ > 0. ) INCOME = 0.
+
+    RETURN  
+
+  END SUBROUTINE GET_INT_VEL_OVERLAP
+
+PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
        LIMDT, LIMDTT2,  &
        FEMDGI, FEMTGI,FEMT2GI, &
-       CV_DISOPT, CV_NONODS, NPHASE, NCOMP, CV_NODI_IPHA, CV_NODJ_IPHA, ELE, ELE2, GI,  &
+       CV_DISOPT, CV_NONODS, NPHASE, NCOMP, CV_NODI, CV_NODJ, ELE, ELE2, GI,  &
        CV_NLOC, TOTELE, CV_NDGLN, CV_OTHER_LOC, SCVNGI, SCVFEN, INCOME, &
        T, T2, DEN, FEMT, FEMT2, FEMDEN, &
        TMIN, T2MIN, DENMIN, &
@@ -10309,7 +10243,7 @@ end SUBROUTINE GET_INT_VEL
     REAL, intent( in ) :: HDC, DT, s_gc, s_or
     REAL, DIMENSION( : ), intent( in ) :: INCOME,NDOTQ
     logical, intent( in ) :: LIMIT_USE_2ND
-    INTEGER, intent( in ) :: CV_DISOPT,CV_NONODS,NPHASE,NCOMP,CV_NODI_IPHA,CV_NODJ_IPHA,ELE,ELE2,  &
+    INTEGER, intent( in ) :: CV_DISOPT,CV_NONODS,NPHASE,NCOMP,CV_NODI,CV_NODJ,ELE,ELE2,  &
          CV_NLOC,TOTELE,SCVNGI,GI,SELE,CV_SNLOC,STOTEL, &
          IGOT_T2, U_NLOC,U_NONODS,NDIM
     INTEGER, DIMENSION( : ), intent( in ) :: CV_NDGLN
@@ -10366,7 +10300,7 @@ end SUBROUTINE GET_INT_VEL
     REAL, DIMENSION (NPHASE) :: COURANT_OR_MINUS_ONE_NEW
     INTEGER :: CV_KLOC, CV_NODK, CV_NODK_IPHA, CV_KLOC2, CV_NODK2, CV_NODK2_IPHA, CV_STAR_IPHA, &
          CV_SKLOC, CV_SNODK, CV_SNODK_IPHA, U_KLOC,U_NODK,U_NODK_IPHA, IDIM, ELE_DOWN, &
-         CV_NODI, CV_NODJ, ICOMP, IPHASE
+         ICOMP, IPHASE
     INTEGER, DIMENSION( CV_NLOC ) :: E_CV_NODK
     INTEGER, DIMENSION( U_NLOC )  ::E_U_NODK
     integer, DIMENSION(CV_SNLOC ) :: SE_CV_NODK, SE_CV_SNODK
@@ -10405,10 +10339,6 @@ end SUBROUTINE GET_INT_VEL
        DO CV_SKLOC = 1, CV_SNLOC
           SE_CV_SNODK( CV_SKLOC ) = ( SELE - 1 ) * CV_SNLOC + CV_SKLOC
        END DO
-       DO CV_SKLOC = 1, CV_SNLOC
-          IF ( modulo(SE_CV_NODK( CV_SKLOC ),CV_nonods)==CV_NODI ) EXIT
-       END DO
-       CV_SNODK = SE_CV_SNODK( CV_SKLOC )
     END IF
 
 
@@ -10445,6 +10375,12 @@ end SUBROUTINE GET_INT_VEL
              END IF
 
           ELSE
+
+
+             DO CV_SKLOC = 1, CV_SNLOC
+                IF ( modulo(SE_CV_NODK( CV_SKLOC ),CV_nonods)==CV_NODI ) EXIT
+             END DO
+             CV_SNODK = SE_CV_SNODK( CV_SKLOC )
 
              FVT( :, IPHASE ) = INCOME( IPHASE ) * SUF_T_BC( :, IPHASE, CV_SNODK) + &
                                 ( 1. - INCOME( IPHASE ) ) * T( :, IPHASE, CV_NODI)
@@ -11066,7 +11002,7 @@ end SUBROUTINE GET_INT_VEL
     ELSE
 
        CALL LIMITERS( &
-            IGOT_T2, CV_NONODS, NPHASE, IPHASE, CV_NODI_IPHA, CV_NODJ_IPHA, IANISOTROPIC, &
+            IGOT_T2, CV_NONODS, NPHASE, IPHASE, CV_NODI, CV_NODJ, IANISOTROPIC, &
             LIM_VOL_ADJUST, FIRSTORD, NOLIMI, LIMIT_USE_2ND, &
             FEMTGI , FEMDGI, FEMT2GI,INCOME, &
             COURANT_OR_MINUS_ONE_NEW, &
@@ -11110,7 +11046,7 @@ end SUBROUTINE GET_INT_VEL
     contains
       
       PURE SUBROUTINE LIMITERS( &
-       IGOT_T2, CV_NONODS, NPHASE, IPHASE, CV_NODI_IPHA, CV_NODJ_IPHA, IANISOTROPIC, &
+       IGOT_T2, CV_NONODS, NPHASE, IPHASE, CV_NODI, CV_NODJ, IANISOTROPIC, &
        LIM_VOL_ADJUST, FIRSTORD, NOLIMI, LIMIT_USE_2ND, &
        FEMTGI, FEMDGI, FEMT2GI, INCOME, &
        COURANT_OR_MINUS_ONE_NEW, &
@@ -11127,7 +11063,7 @@ end SUBROUTINE GET_INT_VEL
     implicit none
 
 
-    INTEGER, intent( in ) :: IGOT_T2, CV_NONODS, NPHASE, IPHASE, CV_NODI_IPHA, CV_NODJ_IPHA, IANISOTROPIC
+    INTEGER, intent( in ) :: IGOT_T2, CV_NONODS, NPHASE, IPHASE, CV_NODI, CV_NODJ, IANISOTROPIC
     LOGICAL, intent( in ) :: LIM_VOL_ADJUST, FIRSTORD, NOLIMI, LIMIT_USE_2ND 
     REAL, DIMENSION( :, : ), intent( in ) :: FEMTGI, FEMDGI
     REAL, DIMENSION( :, : ), intent(in)  :: FEMT2GI  
@@ -11152,10 +11088,7 @@ end SUBROUTINE GET_INT_VEL
     REAL, DIMENSION( NCOMP, NPhASE ) :: TMIN_STORE, TMAX_STORE, &
          T2MIN_STORE, T2MAX_STORE, &
          DENMIN_STORE, DENMAX_STORE
-    INTEGER :: CV_NODI, CV_NODJ, COUNT, S, E
-
-    CV_NODI = CV_NODI_IPHA - (IPHASE-1)*CV_NONODS
-    CV_NODJ = CV_NODJ_IPHA - (IPHASE-1)*CV_NONODS
+    INTEGER :: COUNT, S, E
 
     IF ( LIM_VOL_ADJUST ) THEN
        RESET_STORE = .FALSE.
@@ -14240,7 +14173,7 @@ SUBROUTINE CALC_ANISOTROP_LIM_VALS_mphase( &
     !     This sub finds the matrix values MATPSI for a given point on the 
     !     stencil 
     IMPLICIT NONE
-    type(state_type), dimension(:), intent(inout) :: state
+    type(state_type), dimension(:), intent(inout), pointer :: state
     LOGICAL, intent(in) ::  BOUND
     real, PARAMETER :: FRALINE=0.001
     INTEGER, intent(in) :: NONODS,NLOC,TOTELE,NDGLNO(:)
@@ -14808,6 +14741,7 @@ SUBROUTINE CALC_ANISOTROP_LIM_VALS_mphase( &
                      &              MINPSI1,MAXPSI1,MINPSI2,MAxPSI2, &
                      &              ELEWIC,LOCCORDSK,BOUND,REFLECT,NDIM)
                 end if
+             if (present(elematpsi)) ELEMATPSI(COUNT)=ELEWIC
              IF(present(ELEMATWEI)) ELEMATWEI((COUNT-1)*NLOC+1:count*nloc)=LOCCORDSK(1:nLOC)
           ENDIF
 
