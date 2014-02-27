@@ -245,14 +245,14 @@
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
               T_DISOPT, T_DG_VEL_INT_OPT, DT, T_THETA, SECOND_THETA, T_BETA, &
               reshape(SUF_T_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),&
-              reshape(SUF_D_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),&
+              reshape(SUF_D_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
               SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
               SUF_T_BC_ROB1, SUF_T_BC_ROB2,  &
-              reshape(WIC_T_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),& 
-              reshape(WIC_D_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),& 
-              reshape(WIC_U_BC,[nphase,u_nonods],order=[2,1]), &
+              reshape(WIC_T_BC,[1,nphase,stotel ],order=[3,2,1]),& 
+              reshape(WIC_D_BC,[1,nphase,stotel ],order=[3,2,1]),& 
+              reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
               DERIV, P,  &
-              reshape(T_SOURCE,[ncomp,nphase,cv_nonods],order=[3,2,1]),& 
+              reshape(T_SOURCE,[1,nphase,cv_nonods],order=[3,2,1]),& 
               T_ABSORB, VOLFRA_PORE, &
               NDIM, &
               NCOLM, FINDM, COLM, MIDM, &
@@ -263,7 +263,7 @@
               THETA_GDIFF, &
               reshape(SUF_T2_BC,[igot_t2,nphase,stotel * cv_snloc],order=[3,2,1]),&
               SUF_T2_BC_ROB1, SUF_T2_BC_ROB2,&
-              reshape( WIC_T2_BC,[igot_t2,nphase,stotel * cv_snloc],order=[3,2,1]),&
+              reshape( WIC_T2_BC,[igot_t2,nphase,stotel ],order=[3,2,1]),&
               IN_ELE_UPWIND, DG_ELE_UPWIND, &
               MEAN_PORE_CV, &
               SMALL_FINACV, SMALL_COLACV, size(small_colacv), mass_Mn_pres, THERMAL, &
@@ -315,11 +315,13 @@
                     block_to_global_acv,global_dense_block_acv)
 
                IF( IGOT_T2 == 1) THEN
-                  CALL SOLVER( ACV, T, CV_RHS, &
+                  CALL SOLVER( ACV, T(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp),&
+                       CV_RHS(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp), &
                        FINACV, COLACV, &
                        trim('/material_phase::Component1/scalar_field::ComponentMassFractionPhase1/prognostic') )
                ELSE
-                  CALL SOLVER( ACV, T, CV_RHS, &
+                  CALL SOLVER( ACV, T(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp),&
+                       CV_RHS(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp), &
                        FINACV, COLACV, &
                        trim(option_path) )
                END IF
@@ -464,47 +466,47 @@
       U_ELE_TYPE = CV_ELE_TYPE
       path='/material_phase[0]/scalar_field::Temperature/prognostic/temporal_discretisation/control_volumes/second_theta'
       call get_option( path, second_theta, stat )
-      CV_METHOD = .FALSE.
-
-      IF(CV_METHOD) THEN ! cv method...
-
-         CALL CV_ASSEMB( state, &
-              CV_RHS, &
-              NCOLACV, ACV, DENSE_BLOCK_MATRIX, FINACV, COLACV, MIDACV, &
-              SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV, &
-              NCOLCT, CT, DIAG_SCALE_PRES, CT_RHS, FINDCT, COLCT, &
-              CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
-              CV_ELE_TYPE,  &
-              NPHASE, &
-              CV_NLOC, U_NLOC, X_NLOC,  &
-              CV_NDGLN, X_NDGLN, U_NDGLN, &
-              CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
-              X, Y, Z, NU, NV, NW, &
-              NU, NV, NW, NUOLD, NVOLD, NWOLD, &
-              T, TOLD, DEN, DENOLD, &
-              MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
-              T_DISOPT, T_DG_VEL_INT_OPT, DT, T_THETA, SECOND_THETA, T_BETA, &
-              SUF_T_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
-              SUF_T_BC_ROB1, SUF_T_BC_ROB2,  &
-              WIC_T_BC, WIC_D_BC, WIC_U_BC, &
-              DERIV, P,  &
-              T_SOURCE, T_ABSORB, VOLFRA_PORE, &
-              NDIM, GETCV_DISC, GETCT, &
-              NCOLM, FINDM, COLM, MIDM, &
-              XU_NLOC, XU_NDGLN, FINELE, COLELE, NCOLELE, &
-              OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
-              T_FEMT, DEN_FEMT, &
-              IGOT_T2, T2, T2OLD, IGOT_THETA_FLUX, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
-              THETA_FLUX, ONE_M_THETA_FLUX, THETA_GDIFF, &
-              SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
-              MEAN_PORE_CV, &
-              FINACv, COLACV, NCOLACV, ACV, THERMAL, &
-              mass_ele_transp )
-
-      ELSE ! this is for DG...
-
-        !TEMPORAL
-        allocate(ACV(NCOLACV))
+!!$      CV_METHOD = .FALSE.
+!!$
+!!$      IF(CV_METHOD) THEN ! cv method...
+!!$
+!!$         CALL CV_ASSEMB( state, &
+!!$              CV_RHS, &
+!!$              NCOLACV, ACV, DENSE_BLOCK_MATRIX, FINACV, COLACV, MIDACV, &
+!!$              SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV, &
+!!$              NCOLCT, CT, DIAG_SCALE_PRES, CT_RHS, FINDCT, COLCT, &
+!!$              CV_NONODS, U_NONODS, X_NONODS, TOTELE, &
+!!$              CV_ELE_TYPE,  &
+!!$              NPHASE, &
+!!$              CV_NLOC, U_NLOC, X_NLOC,  &
+!!$              CV_NDGLN, X_NDGLN, U_NDGLN, &
+!!$              CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
+!!$              X, Y, Z, NU, NV, NW, &
+!!$              NU, NV, NW, NUOLD, NVOLD, NWOLD, &
+!!$              T, TOLD, DEN, DENOLD, &
+!!$              MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
+!!$              T_DISOPT, T_DG_VEL_INT_OPT, DT, T_THETA, SECOND_THETA, T_BETA, &
+!!$              SUF_T_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+!!$              SUF_T_BC_ROB1, SUF_T_BC_ROB2,  &
+!!$              WIC_T_BC, WIC_D_BC, WIC_U_BC, &
+!!$              DERIV, P,  &
+!!$              T_SOURCE, T_ABSORB, VOLFRA_PORE, &
+!!$              NDIM, GETCV_DISC, GETCT, &
+!!$              NCOLM, FINDM, COLM, MIDM, &
+!!$              XU_NLOC, XU_NDGLN, FINELE, COLELE, NCOLELE, &
+!!$              OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
+!!$              T_FEMT, DEN_FEMT, &
+!!$              IGOT_T2, T2, T2OLD, IGOT_THETA_FLUX, SCVNGI_THETA, GET_THETA_FLUX, USE_THETA_FLUX, &
+!!$              THETA_FLUX, ONE_M_THETA_FLUX, THETA_GDIFF, &
+!!$              SUF_T2_BC, SUF_T2_BC_ROB1, SUF_T2_BC_ROB2, WIC_T2_BC, IN_ELE_UPWIND, DG_ELE_UPWIND, &
+!!$              MEAN_PORE_CV, &
+!!$              FINACv, COLACV, NCOLACV, ACV, THERMAL, &
+!!$              mass_ele_transp )
+!!$
+!!$      ELSE ! this is for DG...
+!!$
+!!$        !TEMPORAL
+!!$        allocate(ACV(NCOLACV))
 
 
          CALL WRAPPER_ASSEMB_FORCE_CTY( state, &
@@ -529,7 +531,7 @@
               XU_NLOC, XU_NDGLN, &
               option_path )
 
-      ENDIF
+!!$      ENDIF
 
     END SUBROUTINE CV_ASSEMB_CV_DG
 

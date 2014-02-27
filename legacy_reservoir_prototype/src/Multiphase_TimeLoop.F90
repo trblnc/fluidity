@@ -414,7 +414,7 @@
            LIMVDTT2OLD(1,nphase,ncv_faces),&
            NDOTQCOLD(nphase,ncv_faces),&
            LIMCOLD(ncomp,nphase,ncv_faces),&
-           LIMC2OLD(ncomp,nphase,ncv_faces),&
+           LIMC2OLD(1,nphase,ncv_faces),&
            LIMCDOLD(ncomp,nphase,ncv_faces),&
            LIMCDTOLD(ncomp,nphase,ncv_faces),&
            LIMCDTT2OLD(ncomp,nphase,ncv_faces))
@@ -755,15 +755,15 @@
                  reshape(DENSITY_COMPONENT_OLD,[ncomp,nphase,cv_nonods],order=[3,2,1]), &
                  MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
                  v_disopt, v_dg_vel_int_opt, dt, v_theta, second_theta, v_beta, &
-                 reshape(Component_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
-                 reshape(Density_BC,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
+                 reshape(Component_BC,[ncomp,nphase,stotel*cv_snloc],order=[3,2,1]),&
+                 reshape(Density_BC,[1,nphase,stotel*cv_snloc],order=[3,2,1]),&
                  Velocity_U_BC, Velocity_V_BC, Velocity_W_BC, SUF_SIG_DIAGTEN_BC,&
                  suf_comp_bc_rob1, suf_comp_bc_rob2, &
-                 reshape(Component_BC_Spatial,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
-                 reshape(Density_BC_Spatial,[ncomp,nphase,cv_nonods],order=[3,2,1]),&
-                 reshape(Velocity_U_BC_Spatial,[nphase,u_nonods],order=[2,1]), &
+                 reshape(Component_BC_Spatial,[1,nphase,stotel],order=[3,2,1]),&
+                 reshape(Density_BC_Spatial,[1,nphase,stotel],order=[3,2,1]),&
+                 reshape(Velocity_U_BC_Spatial,[nphase,stotel],order=[2,1]), &
                  DRhoDPressure, Pressure_FEM, &
-                 reshape(Component_Source,[ncomp,nphase,cv_nonods]),&
+                 reshape(Component_Source,[1,nphase,cv_nonods]),&
                  Component_Absorption, Porosity, &
                  NDIM, &
                  NCOLM, FINDM, COLM, MIDM, &
@@ -771,9 +771,9 @@
                  OPT_VEL_UPWIND_COEFS, NOPT_VEL_UPWIND_COEFS, &
                  igot_t2, reshape(PhaseVolumeFraction_Old,[1,nphase,cv_nonods],order=[3,2,1]),&
                  scvngi_theta, &
-                 reshape(PhaseVolumeFraction_BC,[1,nphase,cv_nonods],order=[3,2,1]),&
+                 reshape(PhaseVolumeFraction_BC,[1,nphase,stotel*cv_snloc],order=[3,2,1]),&
                  suf_vol_bc_rob1, suf_vol_bc_rob2,&
-                 reshape(PhaseVolumeFraction_BC_Spatial,[1,nphase,cv_nonods],order=[3,2,1]),&
+                 reshape(PhaseVolumeFraction_BC_Spatial,[1,nphase,stotel],order=[3,2,1]),&
                  in_ele_upwind, dg_ele_upwind, &
                  MEAN_PORE_CV, &
                  small_finacv,small_colacv,size(small_colacv),&
@@ -1219,7 +1219,7 @@
                        x, y, z, Velocity_NU, Velocity_NV, Velocity_NW, &
                        u_ele_type, p_ele_type, ncomp_diff_coef, comp_diffusion_opt, &
                        Component_Diffusion_Operator_Coefficient( icomp, :, : ), &
-                       Component_Diffusion(:,:,:,(icomp-1)*nphase+1:icomp*nphase) )
+                       Component_Diffusion(:,:,:,: ))
 
                end do Loop_Components
 
@@ -1879,7 +1879,7 @@ ncv_faces=CV_count_faces( SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV,&
            LIMVDTT2OLD(1,nphase,ncv_faces),&
            NDOTQCOLD(nphase,ncv_faces),&
            LIMCOLD(ncomp,nphase,ncv_faces),&
-           LIMC2OLD(ncomp,nphase,ncv_faces),&
+           LIMC2OLD(1,nphase,ncv_faces),&
            LIMCDOLD(ncomp,nphase,ncv_faces),&
            LIMCDTOLD(ncomp,nphase,ncv_faces),&
            LIMCDTT2OLD(ncomp,nphase,ncv_faces))
