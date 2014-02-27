@@ -1114,7 +1114,7 @@ contains
             IF( (SELE /= 0) .AND. (INCOME(iphase) > 0.5) ) BCZERO=0.0
          
 
-            do icomp=1,nphase
+            do icomp=1,ncomp
 
                rhs_NODI_IPHA=icomp+(iphase-1)*ncomp+(CV_NODI-1)*NPHASE*NCOMP
 
@@ -1231,8 +1231,8 @@ END DO Loop_Elements
 
 
                   CV_RHS( rhs_NODI_IPHA ) = CV_RHS( rhs_NODI_IPHA ) &
-                       + (CV_BETA * DENOLD(ICOMP,IPHASE,CV_NODI) * T2OLD(1,IPHASE,CV_NODI_IPHA) &
-                       + (1.-CV_BETA) * DEN(ICOMP,IPHASE,CV_NODI) * T2(1,IPHASE,CV_NODI_IPHA))  &
+                       + (CV_BETA * DENOLD(ICOMP,IPHASE,CV_NODI) * T2OLD(1,IPHASE,CV_NODI) &
+                       + (1.-CV_BETA) * DEN(ICOMP,IPHASE,CV_NODI) * T2(1,IPHASE,CV_NODI))  &
                        * MEAN_PORE_CV(CV_NODI) * MASS_CV(CV_NODI) * TOLD(ICOMP,IPHASE,CV_NODI) / DT
                ELSE
 
@@ -1245,13 +1245,14 @@ END DO Loop_Elements
                   CSR_ACV( IMID_IPHA ) =  CSR_ACV( IMID_IPHA ) &
                     !+ (CV_BETA * DENOLD(CV_NODI_IPHA) + (1.-CV_BETA) * DEN(CV_NODI_IPHA))  &
                        + (CV_BETA * DEN(ICOMP,IPHASE,CV_NODI) &
-                       + (1.-CV_BETA) * DEN(ICOMP,IPHASe,CV_NODI))  &
+                       + (1.-CV_BETA) * DEN(ICOMP,IPHASE,CV_NODI))  &
                        * MEAN_PORE_CV(CV_NODI) * MASS_CV(CV_NODI) / DT
 
                   CV_RHS( rhs_NODI_IPHA ) = CV_RHS( rhs_NODI_IPHA ) &
-                       + (CV_BETA * DENOLD(ICOMP,IPHASE,CV_NODI_IPHA) &
-                       + (1.-CV_BETA) * DEN(ICOMP,IPHASE,CV_NODI_IPHA)) &
+                       + (CV_BETA * DENOLD(ICOMP,IPHASE,CV_NODI) &
+                       + (1.-CV_BETA) * DEN(ICOMP,IPHASE,CV_NODI)) &
                        * MEAN_PORE_CV(CV_NODI) * MASS_CV(CV_NODI) * TOLD(ICOMP,IPHASE,CV_NODI) / DT
+
                ENDIF
                   
 
