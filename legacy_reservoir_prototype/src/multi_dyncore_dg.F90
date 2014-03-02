@@ -310,18 +310,18 @@
             do icomp=1,ncomp
 
                call assemble_global_multiphase_csr(acv,&
-                    block_acv((icomp-1)*nblock_acv+1:icomp*nblock_acv),&
+                    block_acv(icomp:ncomp*nblock_acv:ncomp),&
                     dense_block_matrix(:,:,(icomp-1)*cv_nonods+1:icomp*cv_nonods),&
                     block_to_global_acv,global_dense_block_acv)
 
                IF( IGOT_T2 == 1) THEN
-                  CALL SOLVER( ACV, T(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp),&
-                       CV_RHS(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp), &
+                  CALL SOLVER( ACV, T(icomp:ncomp*(nphase*cv_nonods-1)+icomp:ncomp),&
+                       CV_RHS(icomp:ncomp*(nphase*cv_nonods-1)+icomp:ncomp), &
                        FINACV, COLACV, &
                        trim('/material_phase::Component1/scalar_field::ComponentMassFractionPhase1/prognostic') )
                ELSE
-                  CALL SOLVER( ACV, T(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp),&
-                       CV_RHS(icomp:ncomp*(nphase*cv_nonods-1)+icomp:icomp), &
+                  CALL SOLVER( ACV, T(icomp:ncomp*(nphase*cv_nonods-1)+icomp:ncomp),&
+                       CV_RHS(icomp:ncomp*(nphase*cv_nonods-1)+icomp:ncomp), &
                        FINACV, COLACV, &
                        trim(option_path) )
                END IF

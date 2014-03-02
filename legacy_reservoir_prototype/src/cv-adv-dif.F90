@@ -1119,7 +1119,7 @@ contains
          do iphase=1,nphase
 
             BCZERO=1.0
-            IF( (SELE /= 0) .AND. (INCOME(iphase) > 0.5) ) BCZERO=0.0
+            IF( (SELE /= 0) .AND. (INCOME(iphase) >= 0.5) ) BCZERO=0.0
          
 
             do icomp=1,ncomp
@@ -9064,6 +9064,7 @@ pure function mtolfun(value)
        IF( WIC_U_BC( IPHASE, SELE ) /= WIC_U_BC_DIRICHLET ) THEN ! velocity free boundary
           s = U_NDGLN( ( ELE - 1 ) * U_NLOC + 1) + (IPHASE-1)*U_NONODS
           e = U_NDGLN( ELE * U_NLOC )            + (IPHASE-1)*U_NONODS 
+          UDGI=0.0
           UDGI( 1, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NU( s : e ))
           if (ndim>=2) UDGI( 2, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NV( s : e ))
           if (ndim==3) UDGI( 3, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NW( s : e ))
@@ -9074,14 +9075,16 @@ pure function mtolfun(value)
           U_SNODK_IPHA_V = [(s+ ( SELE - 1 ) * U_SNLOC + ( IPHASE - 1 ) * STOTEL*U_SNLOC,s=1,U_SNLOC)] 
 
           IF(WIC_U_BC(IPHASE, SELE) == 10) THEN
+             UDGI=0.0
              UDGI( 1, IPHASE ) = DOT_PRODUCT(SUFEN(U_SLOC2LOC, GI ),&
                   0.5*( NU( U_NODK_IPHA_V ) + SUF_U_BC(1,IPHASE,1+ ( SELE - 1 ) * U_SNLOC:sele*U_snloc)))
              if (ndim>=2) UDGI( 2, IPHASE ) = DOT_PRODUCT(SUFEN(U_SLOC2LOC, GI ),&
-                  0.5*( NV( U_NODK_IPHA_V ) + SUF_U_BC(1,IPHASE,1+ ( SELE - 1 ) * U_SNLOC:sele*U_snloc)))
+                  0.5*( NV( U_NODK_IPHA_V ) + SUF_U_BC(2,IPHASE,1+ ( SELE - 1 ) * U_SNLOC:sele*U_snloc)))
              if(ndim>= 3) UDGI( 3, IPHASE ) = DOT_PRODUCT(SUFEN(U_SLOC2LOC, GI ),&
-                  0.5*( NW( U_NODK_IPHA_V ) + SUF_U_BC(1,IPHASE,1+ ( SELE - 1 ) * U_SNLOC:sele*U_snloc)))
+                  0.5*( NW( U_NODK_IPHA_V ) + SUF_U_BC(3,IPHASE,1+ ( SELE - 1 ) * U_SNLOC:sele*U_snloc)))
              UGI_COEF_ELE(:, IPHASE, U_SLOC2LOC)=UGI_COEF_ELE(:, IPHASE, U_SLOC2LOC)+0.5
           else
+             UDGI=0.0
              UDGI( 1, IPHASE ) = DOT_PRODUCT(SUFEN(U_SLOC2LOC, GI ),&
                   SUF_U_BC( 1, IPHASE,1+ ( SELE - 1 ) * U_SNLOC:sele*U_SNLOC ))
              if (ndim>=2) UDGI( 2, IPHASE ) = DOT_PRODUCT(SUFEN(U_SLOC2LOC, GI ),&
@@ -9096,6 +9099,7 @@ pure function mtolfun(value)
        DO IPHASE = 1, NPHASE
        s = U_NDGLN( ( ELE - 1 ) * U_NLOC + 1) + (IPHASE-1)*U_NONODS
        e = U_NDGLN( ELE * U_NLOC )            + (IPHASE-1)*U_NONODS 
+       UDGI=0.0
        UDGI( 1, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NU( s : e ))
        if(ndim>= 2) UDGI( 2, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NV( s : e ))
        if(ndim ==3) UDGI( 3, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NW( s : e ))
