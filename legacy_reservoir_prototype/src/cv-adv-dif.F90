@@ -9113,8 +9113,8 @@ pure function mtolfun(value)
                 DO IPHASE = 1, NPHASE
                 U_NODK2_IPHA = U_NDGLN((ELE2-1)*U_NLOC+U_KLOC2) +(IPHASE-1)*U_NONODS
                 UDGI2( 1, IPHASE )  = UDGI2( 1, IPHASE ) + SUFEN( U_KLOC, GI ) * NU( U_NODK2_IPHA )
-                UDGI2( 2, IPHASE )  = UDGI2( 2, IPHASE ) + SUFEN( U_KLOC, GI ) * NV( U_NODK2_IPHA )
-                UDGI2( 3, IPHASE )  = UDGI2( 3, IPHASE ) + SUFEN( U_KLOC, GI ) * NW( U_NODK2_IPHA )
+                if(ndim>= 2) UDGI2( 2, IPHASE )  = UDGI2( 2, IPHASE ) + SUFEN( U_KLOC, GI ) * NV( U_NODK2_IPHA )
+                if(ndim ==3) UDGI2( 3, IPHASE )  = UDGI2( 3, IPHASE ) + SUFEN( U_KLOC, GI ) * NW( U_NODK2_IPHA )
                 UGI_COEF_ELE2(:, IPHASE, U_KLOC2)=UGI_COEF_ELE2(:, IPHASE, U_KLOC2)+1.0
                 END DO
              ENDIF
@@ -9145,8 +9145,9 @@ pure function mtolfun(value)
 
           IF( CV_DG_VEL_INT_OPT < 0 ) THEN
 
-             NDOTQ_INT = CVNORMX( GI ) * UDGI_INT(1, :) & 
-                           + CVNORMY( GI ) * UDGI_INT(2, :) + CVNORMZ( GI ) * UDGI_INT(3, :)
+             NDOTQ_INT = CVNORMX( GI ) * UDGI_INT(1, :)
+             if (ndim>=2) NDOTQ_INT=NDOTQ_INT+ CVNORMY( GI ) * UDGI_INT(2, :)
+             if (ndim==3) NDOTQ_INT=NDOTQ_INT+ CVNORMZ( GI ) * UDGI_INT(3, :)
 
              WHERE ( NDOTQ_INT <= 0.0 )   !Incoming
                 !   DT_I=1.0

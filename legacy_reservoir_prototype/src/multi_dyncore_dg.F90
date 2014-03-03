@@ -271,8 +271,6 @@
               option_path,&
               theta_flux=THETA_FLUX, one_m_theta_flux=ONE_M_THETA_FLUX)
 
-         t=0.
-
          Conditional_Lumping: IF(LUMP_EQNS) THEN
             ! Lump the multi-phase flow eqns together
             ALLOCATE( CV_RHS_SUB( CV_NONODS ))
