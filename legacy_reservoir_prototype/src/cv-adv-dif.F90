@@ -726,7 +726,6 @@ contains
          IF( GET_THETA_FLUX ) THEN
             IF( IGOT_T2 == 1 ) THEN
                GET_GTHETA = .TRUE.
-               THETA_GDIFF = 0.0
             END IF
          ENDIF
       ENDIF
@@ -1052,8 +1051,8 @@ contains
          IF( ( CV_NODI/= CV_NODJ ) .AND. ( CV_NODJ /= 0 ) ) THEN
             do iphase=1, nphase
                do icomp=1,ncomp
-                  CSR_ACV( icomp+iphase*ncomp+(JCOUNT_IPHA-1)*NPHASE*ncomp) =  &
-                       CSR_ACV( icomp+iphase*ncomp+(JCOUNT_IPHA-1)*NPHASE*ncomp)  &
+                  CSR_ACV( icomp+(iphase-1)*ncomp+(JCOUNT_IPHA-1)*NPHASE*ncomp) =  &
+                       CSR_ACV( icomp+(iphase-1)*ncomp+(JCOUNT_IPHA-1)*NPHASE*ncomp)  &
                        + SECOND_THETA * FTHETA_T2(icomp,iphase) * SCVDETWEI( GI ) * NDOTQNEW(iphase)&
                        * INCOME(iphase) * LIMD(icomp,iphase)  & ! advection
                        - FTHETA(icomp,iphase) * SCVDETWEI( GI ) * DIFF_COEF_DIVDX(icomp,iphase) ! Diffusion contribution
@@ -10666,7 +10665,7 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
          
           END IF ! SCALE_DOWN_WIND
 
- do iphase=1,nphase
+          do iphase=1,nphase
           DO CV_KLOC = 1, CV_NLOC
              CV_NODK = E_CV_NODK( CV_KLOC )
 
