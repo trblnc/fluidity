@@ -3146,7 +3146,7 @@ END DO Loop_Elements
            ONE_M_FTHETA_T2OLD, THERM_FTHETA
       real, dimension(1,nphase) ::FEMT2GI,FVT2
 
-      REAL, DIMENSION( NCOLCMC)  :: MASS_MN_PRES
+      REAL, DIMENSION( :NCOLCMC), allocatable  :: MASS_MN_PRES
 
       REAL, PARAMETER :: W_SUM_ONE = 1.
 
@@ -3230,6 +3230,7 @@ END DO Loop_Elements
 
       ! Allocate memory for the control volume surface shape functions, etc.
 
+      allocate( MASS_MN_PRES(NCOLCMC))
       ALLOCATE( CVNORMX( SCVNGI ))
       ALLOCATE( CVNORMY( SCVNGI ))
       ALLOCATE( CVNORMZ( SCVNGI ))
@@ -10217,8 +10218,6 @@ pure function mtolfun(value)
   END SUBROUTINE GET_INT_VEL_OVERLAP
 
 end SUBROUTINE GET_INT_VEL
-
-
      
 
 SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
@@ -10260,14 +10259,14 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     INTEGER, DIMENSION( : ), intent( in ), target :: CV_NDGLN
     INTEGER, DIMENSION( : ), intent( in ) :: CV_OTHER_LOC
     INTEGER, DIMENSION( : ), intent( in ) :: CV_SLOC2LOC
-    INTEGER, DIMENSION( :, :,: ), intent( in ) :: WIC_T_BC, WIC_D_BC
-    INTEGER, DIMENSION( :, :,: ), intent( in ) :: WIC_T2_BC
+    INTEGER, DIMENSION( :, : , : ), intent( in ) :: WIC_T_BC, WIC_D_BC
+    INTEGER, DIMENSION( :, : , : ), intent( in ) :: WIC_T2_BC
     REAL, DIMENSION( :, : ), intent( in ) :: SUFEN
     REAL, DIMENSION( :, : ), intent( in ) :: SCVFEN
     REAL, DIMENSION( :, : ), intent( in ) :: SCVFENX, SCVFENY, SCVFENZ
     REAL, DIMENSION( :  ), intent( in ) :: CVNORMX, CVNORMY, CVNORMZ
-    REAL, DIMENSION( :, :, : ), intent( in ) :: T, DEN, FEMT, FEMDEN
-    REAL, DIMENSION( :, : ,:), intent( in ) :: T2, FEMT2
+    REAL, DIMENSION( : , : , : ), intent( in ) :: T, DEN, FEMT, FEMDEN
+    REAL, DIMENSION( : , : , : ), intent( in ) :: T2, FEMT2
     REAL, DIMENSION( :, :, : ), intent( inout ) :: TMIN, DENMIN, TMAX, DENMAX
     REAL, DIMENSION( :,  : ,:), intent( inout ) :: T2MIN, T2MAX
     REAL, DIMENSION( : ), intent( in ) :: MASS_CV
@@ -10305,7 +10304,7 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     INTEGER, PARAMETER :: NON_LIN_PETROV_INTERFACE = 3
 
     LOGICAL :: FIRSTORD, NOLIMI, RESET_STORE, LIM_VOL_ADJUST
-    REAL, DIMENSION( NCOMP, NPHASE ) :: RELAX, TMIN_STORE, TMAX_STORE, TOLDMIN_STORE, &
+    REAL, DIMENSION( NCOMP, NPHASE ) :: TMIN_STORE, TMAX_STORE, TOLDMIN_STORE, &
          T2MIN_STORE, T2MAX_STORE, &
          DENMIN_STORE, DENMAX_STORE
     REAL, DIMENSION (NPHASE) :: COURANT_OR_MINUS_ONE_NEW
@@ -11065,8 +11064,7 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     END IF
 
     IF ( HI_ORDER_HALF ) THEN
-       RELAX = MIN ( 2.*ABS(FEMTGI-0.5), 1.0 )
-       LIMT = RELAX * LIMT + (1.-RELAX) * FEMTGI
+       LIMT = FEMTGI +  MIN ( 2.*ABS(FEMTGI-0.5), 1.0 ) * (LIMT- FEMTGI)
     END IF
 
     LIMDT = LIMD * LIMT
