@@ -550,7 +550,7 @@ contains
       ALLOCATE( TMAX_NOD( NCOMP,NPHASE,CV_NONODS ) )
       ALLOCATE( T2MIN_NOD( IGOT_T2, NPHASE,CV_NONODS ) )
       ALLOCATE( T2MAX_NOD( IGOT_T2, NPHASE,CV_NONODS ) )
-      ALLOCATE( DENMIN_NOD( NCOMP,NPHASE,CV_NONODS ) )
+       ALLOCATE( DENMIN_NOD( NCOMP,NPHASE,CV_NONODS ) )
       ALLOCATE( DENMAX_NOD( NCOMP,NPHASE,CV_NONODS ) )
 
       ewrite(3,*)'here1.2'
@@ -1118,7 +1118,7 @@ contains
          do iphase=1,nphase
 
             BCZERO=1.0
-            IF( (SELE /= 0) .AND. (INCOME(iphase) >= 0.5) ) BCZERO=0.0
+            IF( (SELE /= 0) .AND. (INCOME(iphase) > 0.5) ) BCZERO=0.0
          
 
             do icomp=1,ncomp
@@ -1204,12 +1204,12 @@ END DO Loop_Elements
       
       Loop_CVNODI2: DO CV_NODI = 1, CV_NONODS ! Put onto the diagonal of the matrix
          
-         DO COUNT = SMALL_FINDRM( CV_NODI ), SMALL_FINDRM( CV_NODI + 1 ) - 1, 1
-            IF( SMALL_COLM( COUNT ) == CV_NODI )  then
-               JCOUNT_IPHA = COUNT !An exit may improve the performance!!!
-               exit
-            end IF
-         END DO
+!!$         DO COUNT = SMALL_FINDRM( CV_NODI ), SMALL_FINDRM( CV_NODI + 1 ) - 1, 1
+!!$            IF( SMALL_COLM( COUNT ) == CV_NODI )  then
+!!$               JCOUNT_IPHA = COUNT !An exit may improve the performance!!!
+!!$               exit
+!!$            end IF
+!!$         END DO
 
 
          Loop_IPHASE2: DO IPHASE = 1, NPHASE
@@ -4608,9 +4608,9 @@ END DO Loop_Elements
        DO CV_ILOC=1,CV_NLOC
           X_INOD = X_NDGLN((ELE-1)*X_NLOC +CV_ILOC)
           CV_INOD=CV_NDGLN((ELE-1)*CV_NLOC+CV_ILOC)
-          PSI_AVE(CV_INOD)            =X(X_INOD)
-          PSI_AVE(CV_INOD+CV_NONODS)  =Y(X_INOD)
-          PSI_AVE(CV_INOD+2*CV_NONODS)=Z(X_INOD)
+          PSI_AVE(1+(CV_INOD-1)*3)=X(X_INOD)
+          PSI_AVE(2+(CV_INOD-1)*3)=Y(X_INOD)
+          PSI_AVE(3+(CV_INOD-1)*3)=Z(X_INOD)
        END DO
     END DO
     PSI_INT=1.0
@@ -4634,9 +4634,9 @@ END DO Loop_Elements
        FEMT2OLD = reshape(FEMPSI( 1 + (1+4*ncomp) * NL : NL + (1+4*ncomp)*NL),[1,nphase,cv_nonods]) 
     ENDIF
 
-    XC_CV( 1 : CV_NONODS ) = PSI_AVE( 1 : CV_NONODS )
-    YC_CV( 1 : CV_NONODS ) = PSI_AVE( 1 +CV_NONODS:   2*CV_NONODS )
-    ZC_CV( 1 : CV_NONODS ) = PSI_AVE( 1 +2*CV_NONODS: 3*CV_NONODS )
+    XC_CV( 1 : CV_NONODS ) = PSI_AVE(1:3*CV_NONODS:3)
+    YC_CV( 1 : CV_NONODS ) = PSI_AVE(2:3*CV_NONODS:3)
+    ZC_CV( 1 : CV_NONODS ) = PSI_AVE(3:3*CV_NONODS:3)
     MASS_CV( 1 : CV_NONODS ) = PSI_INT( 1 : CV_NONODS )
 
     DEALLOCATE( PSI )
@@ -9192,10 +9192,7 @@ pure function mtolfun(value)
 
   END SUBROUTINE GET_INT_VEL_ORIG
 
-end SUBROUTINE GET_INT_VEL
-
-
-      PURE SUBROUTINE GET_INT_VEL_OVERLAP( NPHASE,NCOMP, NDOTQ,INCOME, &
+ PURE SUBROUTINE GET_INT_VEL_OVERLAP( NPHASE,NCOMP, NDOTQ,INCOME, &
        HDC, GI, SUFEN, U_NLOC, SCVNGI, TOTELE, U_NONODS, CV_NONODS, U_NDGLN, &
        T, FEMT, DEN, NU,&
        CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ,  &
@@ -9339,7 +9336,7 @@ end SUBROUTINE GET_INT_VEL
 
        do iphase=1,nphase
           IF( WIC_U_BC( iphase,SELE) /= WIC_U_BC_DIRICHLET ) THEN ! velocity free boundary
-             UDGI = 0.0
+             UDGI(:,iphase) = 0.0
              DO U_KLOC_LEV = 1, U_NLOC_LEV
                 U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
                 U_NODK = U_NDGLN(( ELE - 1 ) * U_NLOC + U_KLOC ) 
@@ -9362,7 +9359,7 @@ end SUBROUTINE GET_INT_VEL
              END DO
 
           ! Only modify boundary velocity for incoming velocity...
-          UGI_COEF_ELE=0.0
+          UGI_COEF_ELE(:,iphase,:)=0.0
 
           DO U_KLOC_LEV = 1, U_NLOC_LEV
              U_KLOC=(CV_ILOC-1)*U_NLOC_LEV + U_KLOC_LEV
@@ -9380,8 +9377,8 @@ end SUBROUTINE GET_INT_VEL
           ENDIF
 
        ELSE ! Specified vel bc.
-          UDGI = 0.0
-          UGI_COEF_ELE=0.0
+          UDGI(:,iphase) = 0.0
+          UGI_COEF_ELE(:,iphase,:)=0.0
  
           DO U_SKLOC_LEV = 1, U_SNLOC_LEV
              U_SKLOC = (CV_ILOC-1)*U_SNLOC_LEV + U_SKLOC_LEV
@@ -10229,6 +10226,11 @@ end SUBROUTINE GET_INT_VEL
     RETURN  
 
   END SUBROUTINE GET_INT_VEL_OVERLAP
+
+end SUBROUTINE GET_INT_VEL
+
+
+     
 
 PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
        LIMDT, LIMDTT2,  &
