@@ -331,6 +331,7 @@ contains
            LIMDT, LIMDTT2, FTHETA , FTHETA_T2,&
            ONE_M_FTHETA_T2OLD, THERM_FTHETA, ROBIN1, ROBIN2
       real, dimension(1,nphase) :: LIMT2, FEMT2GI,FVT2
+      real, dimension(ncomp,size(theta_gdiff)) :: ltheta_gdiff
            
 
 
@@ -727,6 +728,7 @@ contains
             IF( IGOT_T2 == 1 ) THEN
                GET_GTHETA = .TRUE.
             END IF
+            ltheta_gdiff=0.0
          ENDIF
       ENDIF
 
@@ -1059,7 +1061,7 @@ contains
             
                   IF(GET_GTHETA) THEN
                      CV_NODI_IPHA=CV_NODI+(IPHASE-1)*CV_NONODS
-                     THETA_GDIFF( CV_NODI_IPHA ) =  THETA_GDIFF( CV_NODI_IPHA ) &
+                     LTHETA_GDIFF( icomp,CV_NODI_IPHA ) =  LTHETA_GDIFF( icomp,CV_NODI_IPHA ) &
                           + FTHETA(icomp,iphase) * SCVDETWEI( GI ) * DIFF_COEF_DIVDX(icomp,iphase) * T(ICOMP,iphase,CV_NODJ) ! Diffusion contribution
                   ENDIF
                end do
@@ -1074,7 +1076,7 @@ contains
                           * SUF_T_BC(icomp,iphase,CV_SILOC)
                      IF(GET_GTHETA) THEN
                         CV_NODI_IPHA=CV_NODI+(IPHASE-1)*CV_NONODS
-                        THETA_GDIFF( CV_NODI_IPHA ) =  THETA_GDIFF( CV_NODI_IPHA ) &
+                        LTHETA_GDIFF( icomp,CV_NODI_IPHA ) =  LTHETA_GDIFF(icomp, CV_NODI_IPHA ) &
                              + FTHETA(icomp,iphase) * SCVDETWEI( GI ) * DIFF_COEF_DIVDX(icomp,iphase) &
                              * SUF_T_BC(icomp,iphase,CV_SILOC)
                      ENDIF
@@ -1095,7 +1097,7 @@ contains
          
                IF(GET_GTHETA) THEN
                   CV_NODI_IPHA=CV_NODI+(IPHASE-1)*CV_NONODS
-                  THETA_GDIFF( CV_NODI_IPHA) =  THETA_GDIFF( CV_NODI_IPHA ) &
+                  LTHETA_GDIFF(icomp, CV_NODI_IPHA) =  LTHETA_GDIFF(icomp, CV_NODI_IPHA ) &
                        -  FTHETA(icomp,iphase) * SCVDETWEI( GI ) * DIFF_COEF_DIVDX(icomp,iphase) &
                        * T(icomp,iphase,  CV_NODI) & ! Diffusion contribution
                        -  SCVDETWEI( GI ) * ROBIN1(icomp,iphase) * T(icomp,iphase, CV_NODI)  ! Robin bc
@@ -1154,7 +1156,7 @@ contains
                     + SCVDETWEI(GI) * ROBIN2(icomp,iphase)
                IF(GET_GTHETA) THEN
                   CV_NODI_IPHA=CV_NODI+(IPHASE-1)*CV_NONODS
-                  THETA_GDIFF( CV_NODI_IPHA ) =  THETA_GDIFF( CV_NODI_IPHA ) &
+                  LTHETA_GDIFF(icomp, CV_NODI_IPHA ) =  LTHETA_GDIFF( icomp,CV_NODI_IPHA ) &
                        + (1.-FTHETA(icomp,iphase)) * SCVDETWEI(GI) * DIFF_COEFOLD_DIVDX(ICOMP,IPHASE)  &
                        * (TOLD(ICOMP,IPHASE,CV_NODJ) - TOLD(ICOMP,IPHASE,CV_NODI)) &
                        ! Robin bc
@@ -1197,7 +1199,7 @@ END DO Loop_Elements
          DO CV_NODI = 1, CV_NONODS
             DO IPHASE = 1, NPHASE
                CV_NODI_IPHA = CV_NODI + ( IPHASE - 1 ) * CV_NONODS
-               THETA_GDIFF(CV_NODI_IPHA) = THETA_GDIFF(CV_NODI_IPHA) / MASS_CV(CV_NODI)
+               LTHETA_GDIFF(:,CV_NODI_IPHA) = LTHETA_GDIFF(:,CV_NODI_IPHA) / MASS_CV(CV_NODI)
             END DO
          END DO
       ENDIF
@@ -1265,14 +1267,26 @@ END DO Loop_Elements
                   
 
             end do
-            DO JPHASE = 1, NPHASE
-               dense_acv(JPHASE,IPHASE,CV_NODI)  = dense_acv(JPHASE,IPHASE,CV_NODI)  &
-                    +  MASS_CV( CV_NODI ) * ABSORBT( CV_NODI, IPHASE, JPHASE )
-            END DO
-            
          END DO Loop_IPHASE2
+           
          
       END DO Loop_CVNODI2
+
+
+      do icomp=1,ncomp
+         do cv_nodi=1,cv_nonods
+            do iphase=1,nphase
+               DO JPHASE = 1, NPHASE
+                  dense_acv(JPHASE,IPHASE,CV_NODI+(icomp-1)*cv_nonods)  =  &
+                       MASS_CV( CV_NODI ) * ABSORBT( CV_NODI,JPHASE,IPHASE+(icomp-1)*nphase )
+               END DO
+            end do
+         end do
+      end do
+
+
+      theta_gdiff=sum(ltheta_gdiff,dim=1)
+      
 
       ! for the output
       T_FEMT = FEMT
@@ -9084,7 +9098,7 @@ pure function mtolfun(value)
        e = U_NDGLN( ELE * U_NLOC )            
        DO IPHASE = 1, NPHASE
           do idim=1,ndim
-             UDGI( : , IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NU(idim,iphase, s : e ))
+             UDGI( idim , IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , NU(idim,iphase, s : e ))
           end do
        end DO
        UGI_COEF_ELE(:, :, 1:U_NLOC)=UGI_COEF_ELE(:,:, 1:U_NLOC)+1.0

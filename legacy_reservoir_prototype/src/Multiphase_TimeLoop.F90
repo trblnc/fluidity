@@ -1318,7 +1318,7 @@
                   call Calculate_ComponentAbsorptionTerm( state, &
                        icomp, cv_ndgln, & 
                        Density, PhaseVolumeFraction, Porosity, mass_ele, &
-                       Component_Absorption )
+                       Component_Absorption(:,:,(icomp-1)*nphase+1:icomp*nphase) )
 
                   if( have_option( '/material_phase[' // int2str( nstate - ncomp ) // &
                        ']/is_multiphase_component/KComp_Sigmoid' ) .and. nphase > 1 ) then
@@ -1326,8 +1326,8 @@
                         if( PhaseVolumeFraction( cv_nodi ) > 0.95 ) then
                            do iphase = 1, nphase
                               do jphase = min( iphase + 1, nphase ), nphase
-                                 Component_Absorption( cv_nodi, iphase, jphase ) = &
-                                      Component_Absorption( cv_nodi, iphase, jphase ) * max( 0.01, &
+                                 Component_Absorption( cv_nodi, iphase, jphase+ (icomp-1)*nphase  ) = &
+                                      Component_Absorption( cv_nodi, iphase, jphase+ (icomp-1)*nphase  ) * max( 0.01, &
                                       20. * ( 1. - PhaseVolumeFraction( cv_nodi ) ) )
                               end do
                            end do
