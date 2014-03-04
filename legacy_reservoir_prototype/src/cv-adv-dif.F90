@@ -10257,7 +10257,7 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     INTEGER, intent( in ) :: CV_DISOPT,CV_NONODS,NPHASE,NCOMP,CV_NODI,CV_NODJ,ELE,ELE2,  &
          CV_NLOC,TOTELE,SCVNGI,GI,SELE,CV_SNLOC,STOTEL, &
          IGOT_T2, U_NLOC,U_NONODS,NDIM
-    INTEGER, DIMENSION( : ), intent( in ) :: CV_NDGLN
+    INTEGER, DIMENSION( : ), intent( in ), target :: CV_NDGLN
     INTEGER, DIMENSION( : ), intent( in ) :: CV_OTHER_LOC
     INTEGER, DIMENSION( : ), intent( in ) :: CV_SLOC2LOC
     INTEGER, DIMENSION( :, :,: ), intent( in ) :: WIC_T_BC, WIC_D_BC
@@ -10280,7 +10280,7 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
          DENMAX_2ND_MC, DENMIN_2ND_MC
     REAL, DIMENSION( :, :, : ), intent( in ) :: T2MAX_2ND_MC, T2MIN_2ND_MC
     REAL, DIMENSION( : , :, : ), intent( in ) :: U
-    INTEGER, DIMENSION( : ), intent( in ) :: U_NDGLN
+    INTEGER, DIMENSION( : ), intent( in ) , target:: U_NDGLN
     REAL, DIMENSION( : , :  ), intent( in ) :: INV_JAC
 
     INTEGER, intent( in ) :: IANISOTROPIC
@@ -10312,8 +10312,8 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     INTEGER :: CV_KLOC, CV_NODK, CV_NODK_IPHA, CV_KLOC2, CV_NODK2, CV_NODK2_IPHA, CV_STAR_IPHA, &
          CV_SKLOC, CV_SNODK, CV_SNODK_IPHA, U_KLOC,U_NODK,U_NODK_IPHA, IDIM, ELE_DOWN, &
          ICOMP, IPHASE
-    INTEGER, DIMENSION( CV_NLOC ) :: E_CV_NODK
-    INTEGER, DIMENSION( U_NLOC )  ::E_U_NODK
+    INTEGER, DIMENSION(:), pointer :: E_CV_NODK
+    INTEGER, DIMENSION(:), pointer  ::E_U_NODK
     integer, DIMENSION(CV_SNLOC ) :: SE_CV_NODK, SE_CV_SNODK
     REAL :: T_BETWEEN_MIN, T_BETWEEN_MAX
     REAL :: T_AVE_EDGE, T_AVE_ELE
@@ -10328,8 +10328,8 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     REAL, DIMENSION( NCOMP, NPHASE ) :: RESIDGI, P_STAR, DIFF_COEF, COEF2, FEMTGI_DDG
 
 
-    real, dimension(ndim) :: cvnormxv
-    real, dimension(ndim,size(scvfenx,1)) :: SCVFENXv
+    real, dimension(size(u,1)) :: cvnormxv
+    real, dimension(size(u,1),size(scvfenx,1)) :: SCVFENXv
 
     cvnormxv(1)=cvnormx(gi)
     if(ndim>=2) cvnormxv(2)=cvnormy(gi)
@@ -10354,8 +10354,8 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     end if
 
 !    ! Figure out global node numbers
-    E_CV_NODK = CV_NDGLN( ( ELE - 1 ) * CV_NLOC + 1: ELE*CV_NLOC )
-    E_U_NODK = U_NDGLN( ( ELE - 1 ) * U_NLOC + 1: ELE*U_NLOC )
+    E_CV_NODK => CV_NDGLN( ( ELE - 1 ) * CV_NLOC + 1: ELE*CV_NLOC )
+    E_U_NODK => U_NDGLN( ( ELE - 1 ) * U_NLOC + 1: ELE*U_NLOC )
 
     IF ( SELE /=0 ) THEN
        DO CV_SKLOC = 1, CV_SNLOC
@@ -10602,9 +10602,10 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                    END IF
                    
                    A_STAR_T = COEF * TDTGI
-                   do idim=1,ndim
-                      A_STAR_X( idim, :, : ) = COEF( :, : ) * TXGI( idim, :, : )
-                   end do
+                   forall (idim=1:ndim,icomp=1,ncomp,iphase=1,nphase,cv)
+                      A_STAR_X( idim, icomp, iphase ) = COEF( icomp, iphase ) * TXGI( idim, icomp, iphase )
+                   end forall
+
                    do iphase=1,nphase
                    RESIDGI(:, IPHASE ) = SQRT ( DOT_PRODUCT( UDGI( :, IPHASE ), UDGI( :, IPHASE ) ) ) / HDC
                    end do
