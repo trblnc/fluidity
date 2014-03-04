@@ -697,8 +697,8 @@
                  CV_NDGLN, X_NDGLN, U_NDGLN, &
                  CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
                  X, Y, Z,& 
-                 Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old, &
-                 Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old, &
+                 reshape([Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old],[ndim,nphase,u_nonods],order=[3,2,1]), & 
+                 reshape([Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old],[ndim,nphase,u_nonods],order=[3,2,1]), &
                  reshape(Temperature_Old,[1,nphase,cv_nonods],order=[3,2,1]),&
                  reshape(dENSITY_CP_OLD,[1,nphase,cv_nonods],order=[3,2,1]), &
                  MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -746,8 +746,8 @@
                  CV_NDGLN, X_NDGLN, U_NDGLN, &
                  CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
                  X, Y, Z,& 
-                 Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old, &
-                 Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old, &
+                 reshape([Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old],[ndim,nphase,u_nonods],order=[3,2,1]), & 
+                 reshape([Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old],[ndim,nphase,u_nonods],order=[3,2,1]), &
                  reshape(Component_Old,[ncomp,nphase,cv_nonods],order=[3,2,1]), &
                  reshape(DENSITY_COMPONENT_OLD,[ncomp,nphase,cv_nonods],order=[3,2,1]), &
                  MAT_NLOC, MAT_NDGLN, MAT_NONODS, &

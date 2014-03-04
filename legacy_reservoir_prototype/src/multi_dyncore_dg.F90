@@ -238,8 +238,10 @@
               CV_NLOC, U_NLOC, X_NLOC,  &
               CV_NDGLN, X_NDGLN, U_NDGLN, &
               CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
-              X, Y, Z, NU, NV, NW, &
-              NU, NV, NW, NUOLD, NVOLD, NWOLD, &
+              X, Y, Z,&
+              reshape([NU, NV, NW],[ndim,nphase,u_nonods],order=[3,2,1]), &
+              reshape([NU, NV, NW],[ndim,nphase,u_nonods],order=[3,2,1]), &
+              reshape([NUOLD, NVOLD, NWOLD],[ndim,nphase,u_nonods],order=[3,2,1]), &
               reshape(T,[ncomp,nphase,cv_nonods]),&
               ltold,lden,ldenold,&
               MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
@@ -932,8 +934,8 @@
          CV_NDGLN, X_NDGLN, U_NDGLN, &
          CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
          X, Y, Z, &
-         U, V, W, &
-         NU, NV, NW, &
+         reshape([U, V, W],[ndim,nphase,u_nonods],order=[3,2,1]), &
+         reshape([NU, NV, NW],[ndim,nphase,u_nonods],order=[3,2,1]), &
          reshape(SATURAOLD,[1,nphase,cv_nonods]),&
          reshape(DENOLD,[1,nphase,cv_nonods]), &
          MAT_NLOC, MAT_NDGLN, MAT_NONODS, & 
@@ -976,8 +978,10 @@
               CV_NLOC, U_NLOC, X_NLOC,  &
               CV_NDGLN, X_NDGLN, U_NDGLN, &
               CV_SNLOC, U_SNLOC, STOTEL, CV_SNDGLN, U_SNDGLN, &
-              X, Y, Z, U, V, W, &
-              NU, NV, NW, NUOLD, NVOLD, NWOLD, & 
+              X, Y, Z,&
+              reshape([U, V, W],[ndim,nphase,u_nonods],order=[3,2,1]), &
+              reshape([NU, NV, NW],[ndim,nphase,u_nonods],order=[3,2,1]), &
+              reshape([NUOLD, NVOLD, NWOLD],[ndim,nphase,u_nonods],order=[3,2,1]), &
               reshape(SATURA,[1,nphase,cv_nonods]),&
               reshape(SATURAOLD,[1,nphase,cv_nonods]),&
               reshape(DEN,[1,nphase,cv_nonods]),&
