@@ -63,7 +63,7 @@ contains
          T, TOLD, DEN, DENOLD, &
          MAT_NLOC, MAT_NDGLN, MAT_NONODS, TDIFFUSION, &
          CV_DISOPT, CV_DG_VEL_INT_OPT, DT, CV_THETA, SECOND_THETA, CV_BETA, &
-         SUF_T_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+         SUF_T_BC, SUF_D_BC, SUF_U_BC,SUF_SIG_DIAGTEN_BC, &
          SUF_T_BC_ROB1, SUF_T_BC_ROB2, &
          WIC_T_BC, WIC_D_BC, WIC_U_BC, &
          DERIV, CV_P, &
@@ -254,8 +254,8 @@ contains
       REAL, intent( in ) :: DT, CV_THETA, SECOND_THETA, CV_BETA
       REAL, DIMENSION( :,:,: ), intent( in ) :: SUF_T_BC, SUF_D_BC
       REAL, DIMENSION( :,:,:  ), intent( in ) :: SUF_T2_BC
-      REAL, DIMENSION( : ), intent( in ) :: SUF_U_BC, SUF_V_BC, SUF_W_BC
-      REAL, DIMENSION( :, : ), intent( in ) :: SUF_SIG_DIAGTEN_BC
+      REAL, DIMENSION( : ,:, :), intent( in ) :: SUF_U_BC
+      REAL, DIMENSION( :, : ,: ), intent( in ) :: SUF_SIG_DIAGTEN_BC
       REAL, DIMENSION( : ), intent( in ) :: SUF_T_BC_ROB1, SUF_T_BC_ROB2
       REAL, DIMENSION( : ), intent( in ) :: SUF_T2_BC_ROB1, SUF_T2_BC_ROB2
       INTEGER, DIMENSION( :,:,: ), intent( in ) ::  WIC_T_BC, WIC_D_BC, WIC_T2_BC
@@ -874,9 +874,7 @@ contains
                                 CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]),&
-                                reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc], order=[3,2,1]), &
+                                SUF_U_BC, WIC_U_BC, SUF_SIG_DIAGTEN_BC, &
                                 UGI_COEF_ELE, UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -895,9 +893,7 @@ contains
                                 CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
-                                reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc], order=[3,2,1]), &
+                                SUF_U_BC, WIC_U_BC, SUF_SIG_DIAGTEN_BC, &
                                 UGI_COEF_ELE,  UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -997,8 +993,11 @@ contains
                                    NDOTQOLD(iphase,global_face), LIMDTT2OLD(1,iphase,global_face), DIFF_COEFOLD_DIVDX(icomp,iphase), &
                                    TOLD(ICOMP,IPHASE,CV_NODJ)*DENOLD(ICOMP,IPHASE,CV_NODJ)*T2OLD(1,IPHASE,CV_NODJ), &
                                    TOLD(ICOMP,IPHASE,CV_NODI)*DENOLD(ICOMP,IPHASE,CV_NODI)*T2OLD(1,IPHASE,CV_NODI) )
+                              FTHETA_T2(icomp,iphase)         = FTHETA(icomp,iphase) * LIMT2(1,iphase)
+                              ONE_M_FTHETA_T2OLD(icomp,iphase) = (1.0-FTHETA(icomp,iphase)) * LIMT2OLD(1,iphase,global_face)
                            end do
                         end do
+                       
                      ELSE
                          do iphase=1, nphase
                            do icomp=1,ncomp
@@ -1009,14 +1008,15 @@ contains
                                    NDOTQOLD(iphase,global_face), LIMDTT2OLD(icomp,iphase,global_face), DIFF_COEFOLD_DIVDX(icomp,iphase), &
                                    TOLD(ICOMP,IPHASE,CV_NODJ)*DENOLD(ICOMP,IPHASE,CV_NODJ), &
                                    TOLD(ICOMP,IPHASE,CV_NODI)*DENOLD(ICOMP,IPHASE,CV_NODI) )
+
+                              FTHETA_T2(icomp,iphase)         = FTHETA(icomp,iphase) * LIMT2(1,iphase)
+                              ONE_M_FTHETA_T2OLD(icomp,iphase) = (1.0-FTHETA(icomp,iphase)) * LIMT2OLD(1,iphase,global_face)
+
                            end do
                         end do
                      ENDIF
 
-                     do iphase=1,nphase
-                        FTHETA_T2(:,iphase)         = FTHETA(:,iphase) * LIMT2(1,iphase)
-                        ONE_M_FTHETA_T2OLD(:,iphase) = (1.0-FTHETA(:,iphase)) * LIMT2OLD(1,iphase,global_face)
-                     end do
+
 
                      IF( got_theta_flux ) THEN ! inner loop
                         IF ( GET_THETA_FLUX ) THEN
@@ -2914,7 +2914,7 @@ END DO Loop_Elements
          T, DEN, &
          MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
          CV_DISOPT, CV_DG_VEL_INT_OPT, DT, CV_THETA, SECOND_THETA, CV_BETA, &
-         SUF_T_BC, SUF_D_BC, SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+         SUF_T_BC, SUF_D_BC, SUF_U_BC, SUF_SIG_DIAGTEN_BC, &
          SUF_T_BC_ROB1, SUF_T_BC_ROB2, &
          WIC_T_BC, WIC_D_BC, WIC_U_BC, &
          DERIV, CV_P, &
@@ -3059,8 +3059,8 @@ END DO Loop_Elements
       REAL, intent( in ) :: DT, CV_THETA, SECOND_THETA, CV_BETA
       REAL, DIMENSION( :,:,: ), intent( in ) :: SUF_T_BC, SUF_D_BC
       REAL, DIMENSION( :,:,:  ), intent( in ) :: SUF_T2_BC
-      REAL, DIMENSION( : ), intent( in ) :: SUF_U_BC, SUF_V_BC, SUF_W_BC
-      REAL, DIMENSION( :, : ), intent( in ) :: SUF_SIG_DIAGTEN_BC
+      REAL, DIMENSION( :,:,:), intent( in ) :: SUF_U_BC
+      REAL, DIMENSION( :, :,:  ), intent( in ) :: SUF_SIG_DIAGTEN_BC
       REAL, DIMENSION(: ), intent( in ) :: SUF_T_BC_ROB1, SUF_T_BC_ROB2
       REAL, DIMENSION( : ), intent( in ) :: SUF_T2_BC_ROB1, SUF_T2_BC_ROB2
       REAL, DIMENSION( : ), intent( in ) :: DERIV
@@ -3081,9 +3081,6 @@ END DO Loop_Elements
       !character( len = option_path_len ), intent( in ), optional :: option_path_spatial_discretisation
 
       ! Local variables
-      INTEGER, PARAMETER :: WIC_T_BC_DIRICHLET = 1, WIC_T_BC_ROBIN = 2, &
-           WIC_T_BC_DIRI_ADV_AND_ROBIN = 3, WIC_D_BC_DIRICHLET = 1, &
-           WIC_U_BC_DIRICHLET = 1
       LOGICAL, DIMENSION( : ), allocatable :: X_SHARE
       LOGICAL, DIMENSION( :, : ), allocatable :: CV_ON_FACE, U_ON_FACE, &
            CVFEM_ON_FACE, UFEM_ON_FACE
@@ -3636,9 +3633,7 @@ END DO Loop_Elements
                                 CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]),&
-                                reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc]), &
+                                SUF_U_BC,WIC_U_BC,SUF_SIG_DIAGTEN_BC, &
                                 UGI_COEF_ELE, UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -3657,9 +3652,7 @@ END DO Loop_Elements
                                 CV_NODI, CV_NODJ, CVNORMX, CVNORMY, CVNORMZ, &
                                 CV_DG_VEL_INT_OPT, ELE, ELE2, U_OTHER_LOC, &
                                 SELE, U_SNLOC, STOTEL, U_SLOC2LOC,&
-                                reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
-                                reshape(WIC_U_BC,[nphase,stotel],order=[2,1]), &
-                                reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc],order=[3,2,1]), &
+                                SUF_U_BC,WIC_U_BC,SUF_SIG_DIAGTEN_BC, &
                                 UGI_COEF_ELE,  UGI_COEF_ELE2, &
                                 ONE_PORE, CV_ELE_TYPE, CV_SLOC2LOC, CV_NLOC, CV_SNLOC, CV_ILOC, CV_JLOC, SCVFEN, CV_NDGLN, CV_OTHER_LOC, &
                                 MASS_CV, OPT_VEL_UPWIND_COEFS,NOPT_VEL_UPWIND_COEFS, NDIM, MAT_NLOC, MAT_NDGLN, MAT_NONODS, &
@@ -7478,8 +7471,8 @@ pure function mtolfun(value)
     real, parameter :: tolerance = 1.e-10
     integer :: i, j
     
-    do i = 1, size(value, 1)
-       do j = 1, size(value, 2)
+    do j = 1, size(value, 2)
+       do i = 1, size(value, 1)
           if ( abs( value(i,j) ) < tolerance ) then
              mtolfun(i,j) = sign( tolerance, value(i,j) )
           else
@@ -10365,8 +10358,8 @@ PURE SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
     E_U_NODK = U_NDGLN( ( ELE - 1 ) * U_NLOC + 1: ELE*U_NLOC )
 
     IF ( SELE /=0 ) THEN
-       SE_CV_NODK  = CV_NDGLN( ( ELE - 1 ) * CV_NLOC + CV_SLOC2LOC )
        DO CV_SKLOC = 1, CV_SNLOC
+          SE_CV_NODK( CV_SKLOC )  = CV_NDGLN( ( ELE - 1 ) * CV_NLOC + CV_SLOC2LOC(CV_SKLOC ))
           SE_CV_SNODK( CV_SKLOC ) = ( SELE - 1 ) * CV_SNLOC + CV_SKLOC
        END DO
     END IF

@@ -248,7 +248,8 @@
               T_DISOPT, T_DG_VEL_INT_OPT, DT, T_THETA, SECOND_THETA, T_BETA, &
               reshape(SUF_T_BC,[ncomp,nphase,stotel * cv_snloc],order=[3,2,1]),&
               reshape(SUF_D_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
-              SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+              reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
+              reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc],order=[3,2,1]), &
               SUF_T_BC_ROB1, SUF_T_BC_ROB2,  &
               reshape(WIC_T_BC,[1,nphase,stotel ],order=[3,2,1]),& 
               reshape(WIC_D_BC,[1,nphase,stotel ],order=[3,2,1]),& 
@@ -942,7 +943,8 @@
          V_DISOPT, V_DG_VEL_INT_OPT, DT, V_THETA, SECOND_THETA, V_BETA, &
          reshape(SUF_VOL_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
          reshape(SUF_D_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
-         SUF_U_BC, SUF_V_BC, SUF_W_BC, SUF_SIG_DIAGTEN_BC, &
+         reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
+         reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc], order=[3,2,1]), &
          SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2,  &
          reshape(WIC_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
          reshape(WIC_D_BC, [1,nphase,stotel],order=[3,2,1]),&
@@ -990,8 +992,8 @@
               V_DISOPT, V_DG_VEL_INT_OPT, DT, V_THETA, SECOND_THETA, V_BETA, &
               reshape(SUF_VOL_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
               reshape(SUF_D_BC,[1,nphase,stotel * cv_snloc],order=[3,2,1]),&
-              SUF_U_BC, SUF_V_BC, SUF_W_BC,&
-              SUF_SIG_DIAGTEN_BC, &
+              reshape( [SUF_U_BC, SUF_V_BC, SUF_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
+              reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc],order=[3,2,1]), &
               SUF_VOL_BC_ROB1, SUF_VOL_BC_ROB2,  &
               reshape(WIC_VOL_BC,[1,nphase,stotel],order=[3,2,1]),&
               reshape(WIC_D_BC, [1,nphase,stotel],order=[3,2,1]),&

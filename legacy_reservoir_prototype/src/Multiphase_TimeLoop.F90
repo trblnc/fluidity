@@ -705,8 +705,9 @@
                  t_disopt, t_dg_vel_int_opt, dt, t_theta, second_theta, t_beta, &
                  reshape(Temperature_BC,[1,nphase,cv_nonods],order=[3,2,1]),&
                  reshape(Density_BC,[1,nphase,cv_nonods],order=[3,2,1]),&
-                 Velocity_U_BC, Velocity_V_BC, Velocity_W_BC, &
-                 suf_sig_diagten_bc, suf_t_bc_rob1, suf_t_bc_rob2, &
+                 reshape( [ Velocity_U_BC, Velocity_V_BC, Velocity_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
+                 reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc],order=[3,2,1]), &
+                 suf_t_bc_rob1, suf_t_bc_rob2, &
                  reshape(Temperature_BC_Spatial,[1,nphase,cv_nonods],order=[3,2,1]),&
                  reshape(Density_BC_Spatial,[1,nphase,cv_nonods],order=[3,2,1]),&
                  reshape(Velocity_U_BC_Spatial,[nphase,u_nonods],order=[2,1]), &
@@ -754,7 +755,8 @@
                  v_disopt, v_dg_vel_int_opt, dt, v_theta, second_theta, v_beta, &
                  reshape(Component_BC,[ncomp,nphase,stotel*cv_snloc],order=[3,2,1]),&
                  reshape(Density_BC,[1,nphase,stotel*cv_snloc],order=[3,2,1]),&
-                 Velocity_U_BC, Velocity_V_BC, Velocity_W_BC, SUF_SIG_DIAGTEN_BC,&
+                 reshape( [ Velocity_U_BC, Velocity_V_BC, Velocity_W_BC],[ndim,nphase,stotel*u_snloc],order=[3,2,1]), &
+                 reshape(SUF_SIG_DIAGTEN_BC,[ndim,nphase,stotel*cv_snloc],order=[3,2,1]), &
                  suf_comp_bc_rob1, suf_comp_bc_rob2, &
                  reshape(Component_BC_Spatial,[1,nphase,stotel],order=[3,2,1]),&
                  reshape(Density_BC_Spatial,[1,nphase,stotel],order=[3,2,1]),&
