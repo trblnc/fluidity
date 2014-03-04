@@ -10717,19 +10717,21 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
        ELSE  ! DG saturation across elements
           IF ( UPWIND ) THEN
 
+             DO IPHASE       =1, nphase
+
              ! Interface tracking...
-             RSCALE( IPHASE ) = 1.0 ! Scaling to reduce the downwind bias(=1downwind, =0central)
-             IF( DOWNWIND_EXTRAP .AND. (courant_or_minus_one_new( IPHASE ).GE.0.0) ) THEN
+                RSCALE( IPHASE ) = 1.0 ! Scaling to reduce the downwind bias(=1downwind, =0central)
+                IF( DOWNWIND_EXTRAP .AND. (courant_or_minus_one_new( IPHASE ).GE.0.0) ) THEN
                 
-                ELE_DOWN = ELE
-                IF ( INCOME( IPHASE ) < 0.5 ) ELE_DOWN = ELE2
-
-                IF ( NON_LIN_PETROV_INTERFACE == 0 ) THEN ! NOT non-linear Petrov-Galerkin Interface
-
-                   TXGI=0.0
-                   DO CV_KLOC = 1, CV_NLOC
-                      CV_NODK = E_CV_NODK( CV_KLOC )
-                      DO IPHASE       =1, nphase
+                   ELE_DOWN = ELE
+                   IF ( INCOME( IPHASE ) < 0.5 ) ELE_DOWN = ELE2
+                   
+                   IF ( NON_LIN_PETROV_INTERFACE == 0 ) THEN ! NOT non-linear Petrov-Galerkin Interface
+                      
+                      TXGI=0.0
+                      DO CV_KLOC = 1, CV_NLOC
+                         CV_NODK = E_CV_NODK( CV_KLOC )
+                         
                          TXGI( 1, :, IPHASE ) = TXGI( 1, :, IPHASE ) + &
                               SCVFENX( CV_KLOC, GI ) * FEMT( :, IPHASE, CV_NODK)
                          IF(NDIM.GE.2) TXGI( 2, :, IPHASE ) = TXGI( 2, :, IPHASE ) + &
@@ -10737,28 +10739,25 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                          IF(NDIM.GE.3) TXGI( 3, :, IPHASE ) = TXGI( 3, :, IPHASE ) + &
                               SCVFENZ( CV_KLOC, GI ) * FEMT( :, IPHASE, CV_NODK)
                       end do
-                   END DO
-
-                   UDGI=0.0
-                   DO U_KLOC = 1, U_NLOC
-                      U_NODK = E_U_NODK( U_KLOC )
-                      DO IPHASE       =1, nphase
+                      
+                      
+                      UDGI(:,iphase)=0.0
+                      DO U_KLOC = 1, U_NLOC
+                         U_NODK = E_U_NODK( U_KLOC )
                          do idim=1,ndim
                             UDGI( idim, IPHASE) = UDGI( 1, IPHASE) + SUFEN( U_KLOC, GI ) * U(idim,iphase, U_NODK )
                          end do
-                      end do
-                   END DO
-
-                   ! cosine rule with velocity and normal:
-                   !RSCALE=ABS(CVNORMX(GI)*UDGI+CVNORMY(GI)*VDGI+CVNORMZ(GI)*WDGI) &
-                   !      /TOLFUN(UDGI**2+VDGI**2+WDGI**2)
-                   ! cosine rule with velocity and concentration gradient:
-                   !RSCALE=ABS(TXGI*UDGI+TYGI*VDGI+TZGI*WDGI) &
-                   !      /TOLFUN((UDGI**2+VDGI**2+WDGI**2)*SQRT(TXGI**2+TYGI**2+TZGI**2))
-                   ! no cosine rule:
-                   DO IPHASE       =1, nphase
+                      END DO
+                   
+                      ! cosine rule with velocity and normal:
+                      !RSCALE=ABS(CVNORMX(GI)*UDGI+CVNORMY(GI)*VDGI+CVNORMZ(GI)*WDGI) &
+                      !      /TOLFUN(UDGI**2+VDGI**2+WDGI**2)
+                      ! cosine rule with velocity and concentration gradient:
+                      !RSCALE=ABS(TXGI*UDGI+TYGI*VDGI+TZGI*WDGI) &
+                      !      /TOLFUN((UDGI**2+VDGI**2+WDGI**2)*SQRT(TXGI**2+TYGI**2+TZGI**2))
+                      ! no cosine rule:
                       RSCALE( IPHASE ) = 1.0 / PTOLFUN( SQRT( SUM( UDGI( :, IPHASE)**2 ) ) )
-
+                   
                       VEC_VEL(1:NDIM) = UDGI( :, IPHASE )
                       VEC_VEL2 = 0.0
                       VEC_VEL2(1:NDIM) = matmul(INV_JAC(1:NDIM, 1:NDIM) , VEC_VEL(1:NDIM) )
@@ -10773,15 +10772,13 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                       ! For quadratic elements...
                       IF( ((NDIM==2).AND.(CV_NLOC==6)).or.((NDIM==3).AND.(CV_NLOC==10)) ) &
                            ELE_LENGTH_SCALE( IPHASE ) = 0.5 * ELE_LENGTH_SCALE( IPHASE )
-                
-                   end do
-                ELSE ! Petrov-Galerkin end of IF(NON_LIN_PETROV_INTERFACE==0) THEN 
+                   
+                   ELSE ! Petrov-Galerkin end of IF(NON_LIN_PETROV_INTERFACE==0) THEN 
 
-                   TXGI=0.0
-                   TGI=0.0
-                   DO CV_KLOC = 1, CV_NLOC
-                      CV_NODK = E_CV_NODK( CV_KLOC )
-                      DO IPHASE       =1, nphase
+                      TXGI(:,:,iphase)=0.0
+                      TGI(:,iphase)=0.0
+                      DO CV_KLOC = 1, CV_NLOC
+                         CV_NODK = E_CV_NODK( CV_KLOC )
                          TXGI( 1, :, IPHASE ) = TXGI( 1, :, IPHASE ) + &
                               SCVFENX( CV_KLOC, GI ) * FEMT( :, IPHASE, CV_NODK)
                          IF(NDIM.GE.2) TXGI( 2, :, IPHASE ) = TXGI( 2, :, IPHASE ) + &
@@ -10790,14 +10787,12 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                               SCVFENZ( CV_KLOC, GI ) * FEMT( :, IPHASE, CV_NODK)
                          TGI( :, IPHASE ) = TGI( :, IPHASE ) + &
                               SCVFEN( CV_KLOC , GI ) * FEMT( :, IPHASE, CV_NODK)
-                      end do
-                   END DO
+                      END DO
 
-                   TDTGI = 0.0
+                      TDTGI(:,iphase) = 0.0
+                      
+                      UDGI(:,iphase) = 0.0  
 
-                   UDGI = 0.0  
-
-                   DO IPHASE       =1, nphase
                       do idim=1,ndim
                          UDGI(idim, IPHASE ) = DOT_PRODUCT(SUFEN( : , GI ) , U(idim,iphase,E_U_NODK))
                       end do
@@ -10822,8 +10817,8 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
 
                       A_STAR_T( :, IPHASE ) = COEF( :, IPHASE ) * TDTGI( :, IPHASE )
                       A_STAR_X( 1, :, IPHASE ) = COEF( :, IPHASE ) * TXGI( 1, :, IPHASE )
-                      A_STAR_X( 2, :, IPHASE ) = COEF( :, IPHASE ) * TXGI( 2, :, IPHASE )
-                      A_STAR_X( 3, :, IPHASE ) = COEF( :, IPHASE ) * TXGI( 3, :, IPHASE )
+                      if (ndim>=2) A_STAR_X( 2, :, IPHASE ) = COEF( :, IPHASE ) * TXGI( 2, :, IPHASE )
+                      if (ndim ==3 ) A_STAR_X( 3, :, IPHASE ) = COEF( :, IPHASE ) * TXGI( 3, :, IPHASE )
 
                       RESIDGI( :, IPHASE ) = SQRT ( A_STAR_X( 1, :, IPHASE )**2 + A_STAR_X( 2, :, IPHASE )**2 + &
                            A_STAR_X( 3, :, IPHASE )**2 ) / HDC
@@ -10864,21 +10859,21 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                       END IF
                   
                    ! Make the diffusion coefficient negative (compressive)
-                      DIFF_COEF( :, IPHASE ) = -DIFF_COEF( :, IPHASE )
-                      RSCALE( IPHASE ) = 1. / TOLFUN( CVNORMX(GI)*UDGI( 1, IPHASE ) + &
-                           CVNORMY(GI)*UDGI( 2, IPHASE ) + &
-                           CVNORMZ(GI)*UDGI( 3, IPHASE ) )
-
-                   end do
-
-                   END IF ! Petrov-Galerkin end of IF(NON_LIN_PETROV_INTERFACE==0) THEN 
-
-                   FEMTGI( :, : ) = 0.0
-                   FEMDGI( :, : ) = 0.0
-                   if (igot_t2==1) FEMT2GI(1, : ) = 0.0
+                   DIFF_COEF( :, IPHASE ) = -DIFF_COEF( :, IPHASE )
+                   RSCALE( IPHASE ) = 1. / TOLFUN( CVNORMX(GI)*UDGI( 1, IPHASE ) + &
+                        CVNORMY(GI)*UDGI( 2, IPHASE ) + &
+                        CVNORMZ(GI)*UDGI( 3, IPHASE ) )
 
 
-                   DO CV_KLOC = 1, CV_NLOC
+                END IF ! Petrov-Galerkin end of IF(NON_LIN_PETROV_INTERFACE==0) THEN 
+                
+
+                FEMTGI( :, IPHASE ) = 0.0
+                FEMDGI( :, IPHASE ) = 0.0
+                if (igot_t2==1) FEMT2GI(1, : ) = 0.0
+                
+
+                DO CV_KLOC = 1, CV_NLOC
                    !CV_KLOC2 = CV_OTHER_LOC( CV_KLOC )
                    !CV_NODK = CV_NDGLN( ( ELE_DOWN - 1 ) * CV_NLOC + CV_KLOC )
                    !CV_NODK_IPHA = CV_NODK + ( IPHASE - 1 ) * CV_NONODS
@@ -10888,47 +10883,39 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                    ! Extrapolate to the downwind value...
                    IF ( NON_LIN_PETROV_INTERFACE .NE. 0 ) THEN 
                       IF ( NON_LIN_PETROV_INTERFACE == 4 ) THEN ! anisotropic diffusion...
-                         DO IPHASE       =1, nphase
                             RGRAY( :, IPHASE ) = RSCALE( IPHASE ) * COEF2( :, IPHASE ) *P_STAR( :, IPHASE ) &
                                  * ( UDGI( 1, IPHASE ) * SCVFENX( CV_KLOC, GI ) &
                                  + UDGI( 2, IPHASE ) * SCVFENY( CV_KLOC, GI ) &
                                  + UDGI( 3, IPHASE ) * SCVFENZ( CV_KLOC, GI ) )
-                         end do
                       ELSE
-                         DO IPHASE       =1, nphase
-                            RGRAY( :, IPHASE ) = -DIFF_COEF( :, IPHASE ) * RSCALE( IPHASE ) &
-                                 * ( CVNORMX(GI)*SCVFENX( CV_KLOC, GI ) &
-                                 + CVNORMY(GI)*SCVFENY( CV_KLOC, GI ) + CVNORMZ(GI)*SCVFENZ( CV_KLOC, GI ) )
-                         end do
+                         RGRAY( :, IPHASE ) = -DIFF_COEF( :, IPHASE ) * RSCALE( IPHASE ) &
+                              * ( CVNORMX(GI)*SCVFENX( CV_KLOC, GI ) &
+                              + CVNORMY(GI)*SCVFENY( CV_KLOC, GI ) + CVNORMZ(GI)*SCVFENZ( CV_KLOC, GI ) )
                       END IF
                    ELSE
-                      DO IPHASE       =1, nphase
-                         RGRAY( :, IPHASE ) = RSCALE( IPHASE ) * ELE_LENGTH_SCALE( IPHASE ) &
-                              * ( UDGI( 1, IPHASE ) * SCVFENX( CV_KLOC, GI ) &
-                              + UDGI( 2, IPHASE ) * SCVFENY( CV_KLOC, GI ) &
-                              + UDGI( 3, IPHASE ) * SCVFENZ( CV_KLOC, GI ) )
-                      end do
+                      RGRAY( :, IPHASE ) = RSCALE( IPHASE ) * ELE_LENGTH_SCALE( IPHASE ) &
+                           * ( UDGI( 1, IPHASE ) * SCVFENX( CV_KLOC, GI ) &
+                           + UDGI( 2, IPHASE ) * SCVFENY( CV_KLOC, GI ) &
+                           + UDGI( 3, IPHASE ) * SCVFENZ( CV_KLOC, GI ) )
                    END IF
 
                    
-                   RSHAPE( :, : ) = SCVFEN( CV_KLOC, GI ) + RGRAY( :, : )
+                   RSHAPE( :, IPHASE ) = SCVFEN( CV_KLOC, GI ) + RGRAY( :, IPHASE )
 
                    !IF ( NON_LIN_PETROV_INTERFACE .NE. 0 ) THEN 
                    !   FEMTGI    = FEMTGI     +  RSHAPE     * 0.5 * ( FEMT( CV_NODK_IPHA ) + FEMT( CV_NODK2_IPHA ) )
                    !   FEMTOLDGI = FEMTOLDGI  +  RSHAPE_OLD * 0.5 * ( FEMTOLD( CV_NODK_IPHA ) + FEMTOLD( CV_NODK2_IPHA ) )
                    !ELSE
-                   DO IPHASE       =1, nphase
-                      FEMTGI( :, IPHASE ) = FEMTGI( :, IPHASE ) + RSHAPE( :, IPHASE ) * FEMT( :, IPHASE, CV_NODK )
+                   FEMTGI( :, IPHASE ) = FEMTGI( :, IPHASE ) + RSHAPE( :, IPHASE ) * FEMT( :, IPHASE, CV_NODK )
                    !END IF
 
-                      FEMDGI( :, IPHASE ) = FEMDGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) * FEMDEN( :, IPHASE, CV_NODK )
-                      IF ( IGOT_T2 == 1 ) THEN
-                         FEMT2GI( 1,IPHASE ) = FEMT2GI( 1,IPHASE ) + SCVFEN( CV_KLOC, GI ) * FEMT2(1,IPHASE,CV_NODK)
-                      ELSE
-                         FEMT2GI( 1,IPHASE ) = 1.0
-                      END IF
-                   end do
-                END DO
+                   FEMDGI( :, IPHASE ) = FEMDGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) * FEMDEN( :, IPHASE, CV_NODK )
+                   IF ( IGOT_T2 == 1 ) THEN
+                      FEMT2GI( 1,IPHASE ) = FEMT2GI( 1,IPHASE ) + SCVFEN( CV_KLOC, GI ) * FEMT2(1,IPHASE,CV_NODK)
+                   ELSE
+                      FEMT2GI( 1,IPHASE ) = 1.0
+                   END IF
+                end do
 
                 IF( .TRUE. ) THEN ! Downwinding for DG...
                    FEMTGI_DDG = 0.0
@@ -10948,25 +10935,23 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                          !FEMTOLDGI_DDG = FEMTOLDGI_DDG + SCVFEN( CV_KLOC, GI ) * ( FEMTOLD( CV_NODK2_IPHA ) &
                          !     * (1.-INCOMEOLD) + FEMTOLD( CV_NODK_IPHA ) * INCOMEOLD )
                          ! Central...
-                         DO IPHASE       =1, nphase
-                            FEMTGI_DDG( :, IPHASE ) = FEMTGI_DDG( :, IPHASE ) +  SCVFEN( CV_KLOC, GI ) &
-                                 * ( FEMT( :, IPHASE, CV_NODK2) * 0.5 + FEMT( :, IPHASE, CV_NODK ) * 0.5 )
-                            if ( .false. ) then
-                               FEMTGI( :, IPHASE ) = FEMTGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
-                                    * ( FEMT( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
-                                    + FEMT( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
-                               FEMDGI( :, IPHASE ) = FEMDGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
-                                    * ( FEMDEN( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
-                                    + FEMDEN( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
-                               IF(IGOT_T2==1) THEN
-                                  FEMT2GI(1,IPHASE ) = FEMT2GI(1, IPHASE ) +  SCVFEN( CV_KLOC, GI ) &
-                                       * ( FEMT2(1, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
-                                       + FEMT2(1, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
-                               ELSE
-                                  FEMT2GI(1, IPHASE ) = 1.0
-                               ENDIF
-                            end if
-                         end do
+                         FEMTGI_DDG( :, IPHASE ) = FEMTGI_DDG( :, IPHASE ) +  SCVFEN( CV_KLOC, GI ) &
+                              * ( FEMT( :, IPHASE, CV_NODK2) * 0.5 + FEMT( :, IPHASE, CV_NODK ) * 0.5 )
+                         if ( .false. ) then
+                            FEMTGI( :, IPHASE ) = FEMTGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
+                                 * ( FEMT( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
+                                 + FEMT( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
+                            FEMDGI( :, IPHASE ) = FEMDGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
+                                 * ( FEMDEN( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
+                                 + FEMDEN( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
+                            IF(IGOT_T2==1) THEN
+                               FEMT2GI(1,IPHASE ) = FEMT2GI(1, IPHASE ) +  SCVFEN( CV_KLOC, GI ) &
+                                    * ( FEMT2(1, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
+                                    + FEMT2(1, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
+                            ELSE
+                               FEMT2GI(1, IPHASE ) = 1.0
+                            ENDIF
+                         end if
 
                       END IF
                    END DO
@@ -10988,25 +10973,25 @@ SUBROUTINE GET_INT_T_DEN(FVT, FVT2, FVD, LIMD, LIMT, LIMT2, &
                    IF ( CV_KLOC2 /= 0 ) THEN
                       CV_NODK2 = CV_NDGLN(( ELE2 - 1 ) * CV_NLOC + CV_KLOC2 )
                       CV_NODK = E_CV_NODK( CV_KLOC )
-                      DO IPHASE       =1, nphase
-                         FEMTGI( :, IPHASE ) = FEMTGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
-                              * ( FEMT( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
-                              + FEMT( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
-                         FEMDGI( :, IPHASE ) = FEMDGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
-                              * ( FEMDEN( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
-                              + FEMDEN( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
-
-                         IF ( IGOT_T2 == 1 ) THEN
-                            FEMT2GI(1, IPHASE ) = FEMT2GI(1, IPHASE ) +  SCVFEN( CV_KLOC, GI ) &
-                                 * ( FEMT2( 1,IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
-                                 + FEMT2( 1,IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
-                         ELSE
-                            FEMT2GI( 1,IPHASE ) = 1.0
-                         ENDIF
-                      end DO
+                      FEMTGI( :, IPHASE ) = FEMTGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
+                           * ( FEMT( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
+                           + FEMT( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
+                      FEMDGI( :, IPHASE ) = FEMDGI( :, IPHASE ) + SCVFEN( CV_KLOC, GI ) &
+                           * ( FEMDEN( :, IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
+                           + FEMDEN( :, IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
+                      
+                      IF ( IGOT_T2 == 1 ) THEN
+                         FEMT2GI(1, IPHASE ) = FEMT2GI(1, IPHASE ) +  SCVFEN( CV_KLOC, GI ) &
+                              * ( FEMT2( 1,IPHASE, CV_NODK2 ) * ( 1.-INCOME( IPHASE ) ) &
+                              + FEMT2( 1,IPHASE, CV_NODK  ) * INCOME( IPHASE ) )
+                      ELSE
+                         FEMT2GI( 1,IPHASE ) = 1.0
+                      ENDIF
                    END IF
                 END DO
              ENDIF ! END OF IF(DOWNWIND_EXTRAP.AND.(courant_or_minus_one_new.GE.0.0)) THEN ELSE ...
+
+          END DO
 
           ELSE ! Central DG...
 

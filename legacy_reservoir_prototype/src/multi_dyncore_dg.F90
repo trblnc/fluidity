@@ -1039,7 +1039,7 @@
 
       sat_femt=[lsat_femt]
       sat_femt([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=sat_femt
-      DEN_femt=[lDEN_femt]
+      DEN_femt(1:nphase*cv_nonods)=[lDEN_femt(1,:,:)]
       DEN_femt([([(i+(j-1)*cv_nonods,j=1,nphase)],i=1,cv_nonods)])=DEN_femt
 
 
