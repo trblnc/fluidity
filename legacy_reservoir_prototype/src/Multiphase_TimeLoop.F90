@@ -361,7 +361,7 @@
 !!$
            Porosity( totele ), &
            PhaseVolumeFraction_FEMT( cv_nonods * nphase ), Temperature_FEMT( cv_nonods * nphase ), &
-           Density_FEMT( cv_nonods * nphase ), Component_FEMT( cv_nonods * nphase * ncomp ), &
+           Density_FEMT( cv_nonods * nphase*ncomp ), Component_FEMT( cv_nonods * nphase * ncomp ), &
            Mean_Pore_CV( cv_nonods ),  SumConc_FEMT( cv_nonods * ncomp ), &
            Dummy_PhaseVolumeFraction_FEMT( cv_nonods * nphase ), dummy_ele( totele ), mass_ele( totele ), &
 !!$
@@ -1340,7 +1340,7 @@
                         DO CV_NODI = 1, CV_NONODS
                            ScalarField_Source_Component( CV_NODI + ( IPHASE - 1 ) * CV_NONODS ) = &
                                 ScalarField_Source_Component( CV_NODI + ( IPHASE - 1 ) * CV_NONODS ) - &
-                                Component_Absorption( CV_NODI, IPHASE, JPHASE ) * &
+                                Component_Absorption( CV_NODI, IPHASE, JPHASE + (icomp-1)*nphase ) * &
                                 Component( CV_NODI + ( JPHASE - 1 ) * CV_NONODS + ( ICOMP - 1 ) * NPHASE * CV_NONODS ) / &
                                 DENSITY_COMPONENT( CV_NODI + ( IPHASE - 1 ) * CV_NONODS + ( ICOMP - 1 ) * NPHASE * CV_NONODS )
                         END DO
@@ -1760,7 +1760,7 @@ deallocate(NDOTQOLD,&
 !!$
                  Porosity( totele ), &
                  PhaseVolumeFraction_FEMT( cv_nonods * nphase ), Temperature_FEMT( cv_nonods * nphase ), &
-                 Density_FEMT( cv_nonods * nphase ), Component_FEMT( cv_nonods * nphase * ncomp ), &
+                 Density_FEMT( cv_nonods * nphase*ncomp ), Component_FEMT( cv_nonods * nphase * ncomp ), &
                  Mean_Pore_CV( cv_nonods ), SumConc_FEMT( cv_nonods * ncomp ), &
                  Dummy_PhaseVolumeFraction_FEMT( cv_nonods * nphase ), dummy_ele( totele ), mass_ele( totele ), &
 !!$
@@ -1963,18 +1963,19 @@ ncv_faces=CV_count_faces( SMALL_FINACV, SMALL_COLACV, SMALL_MIDACV,&
            block_to_global_acv, global_dense_block_acv, &
            finele, colele, midele, findgm_pha, coldgm_pha, middgm_pha, findct, &
            colct, findc, colc, findcmc, colcmc, midcmc, findm, &
-           colm, midm, &
+           colm, midm, & 
 !!$ Defining element-pair type and discretisation options and coefficients
-           opt_vel_upwind_coefs, &
+           opt_vel_upwind_coefs,&
 !!$ For output:
-           PhaseVolumeFraction_FEMT, Temperature_FEMT, Density_FEMT, &
-           Component_FEMT, Mean_Pore_CV, SumConc_FEMT, Dummy_PhaseVolumeFraction_FEMT, &
+           PhaseVolumeFraction_FEMT, Temperature_FEMT)
+      deallocate(Density_FEMT)
+          deallocate(  Component_FEMT, Mean_Pore_CV, SumConc_FEMT, Dummy_PhaseVolumeFraction_FEMT, &
 !!$ Variables used in the diffusion-like term: capilarity and surface tension:
            plike_grad_sou_grad, plike_grad_sou_coef, &
 !!$ Working arrays
            PhaseVolumeFraction_BC_Spatial, Pressure_FEM_BC_Spatial, &
            Density_BC_Spatial, Component_BC_Spatial, Velocity_U_BC_Spatial, Temperature_BC_Spatial, &
-           xu, yu, zu, x, y, z, &
+           xu, yu, zu, x, y, z, & 
            Velocity_U, Velocity_V, Velocity_W, Velocity_U_Old, Velocity_V_Old, Velocity_W_Old, &
            Velocity_NU, Velocity_NV, Velocity_NW, Velocity_NU_Old, Velocity_NV_Old, Velocity_NW_Old, &
            Pressure_FEM, Pressure_CV, Temperature, Density, Density_Cp, Density_Component, PhaseVolumeFraction, &
