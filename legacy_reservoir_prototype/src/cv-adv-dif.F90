@@ -3146,7 +3146,7 @@ END DO Loop_Elements
            ONE_M_FTHETA_T2OLD, THERM_FTHETA
       real, dimension(1,nphase) ::FEMT2GI,FVT2
 
-      REAL, DIMENSION( :NCOLCMC), allocatable  :: MASS_MN_PRES
+      REAL, DIMENSION( :), allocatable  :: MASS_MN_PRES
 
       REAL, PARAMETER :: W_SUM_ONE = 1.
 
@@ -4602,14 +4602,16 @@ END DO Loop_Elements
     NTSOL_INT = 1
 
     NL=CV_NONODS*NPHASE
-    PSI( 1 + 0 * NL : NL*ncomp + 0 * NL )  =      [ T ] 
-    PSI( 1 + 1 * NL *ncomp : NL*ncomp + 1 * NL *ncomp )  =   [ TOLD ]
-    PSI( 1 + 2 * NL *ncomp : NL*ncomp + 2 * NL *ncomp )  =   [ DEN ]
-    PSI( 1 + 3 * NL*ncomp : NL*ncomp + 3 * NL*ncomp )  = [ DENOLD ]
-    IF(IGOT_T2==1) THEN
-       PSI( 1 + 4 * NL*ncomp : NL + 4 * NL*ncomp )  =     [ T2 ] 
-       PSI( 1 + (1+4*ncomp) * NL : NL + (1+4*ncomp) * NL )  =  [ T2OLD ] 
-    ENDIF
+    DO CV_ILOC=1,CV_NONODS
+       PSI( 1 + (cv_iloc-1)*NTSOL: NPHASE*NCOMP+(cv_iloc-1)*NTSOL )  =      [ T(:,:,CV_ILOC) ] 
+       PSI(  1 +NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 2*NPHASE*NCOMP+(cv_iloc-1)*NTSOL )  =    [ TOLD(:,:,CV_ILOC) ]
+       PSI(  1 +2*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 3*NPHASE*NCOMP+(cv_iloc-1)*NTSOL )  =    [ DEN(:,:,CV_ILOC) ]
+       PSI(  1 +3*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 4*NPHASE*NCOMP+(cv_iloc-1)*NTSOL )  =  [ DENOLD(:,:,CV_ILOC) ]
+       IF(IGOT_T2==1) THEN
+          PSI(  1 +4*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: NPHASE*(1+4*NCOMP)+(cv_iloc-1)*NTSOL )  =     [ T2(:,:,CV_ILOC) ] 
+          PSI(  1 +NPHASE*(1+4*NCOMP) + (cv_iloc-1)*NTSOL:cv_iloc*NTSOL )  =  [ T2OLD(:,:,CV_ILOC) ] 
+       ENDIF
+    end DO
 
     DO ELE=1,TOTELE
        DO CV_ILOC=1,CV_NLOC
@@ -4632,14 +4634,18 @@ END DO Loop_Elements
          IGETCT, MASS_MN_PRES, FINDCMC, COLCMC, NCOLCMC, PATH )
 
     NL=CV_NONODS*NPHASE
-    FEMT = reshape(FEMPSI( 1 + 0 * NL : NL*ncomp + 0 * NL ),[ncomp,nphase,cv_nonods]) 
-    FEMTOLD = reshape(FEMPSI( 1 + 1 * NL*ncomp : NL*ncomp + 1 * NL*ncomp),[ncomp,nphase,cv_nonods])  
-    FEMDEN = reshape(FEMPSI( 1 + 2 * NL*ncomp : NL*ncomp + 2 * NL*ncomp ),[ncomp,nphase,cv_nonods])   
-    FEMDENOLD  = reshape(FEMPSI( 1 + 3 * NL*ncomp : NL*ncomp + 3*NL*ncomp),[ncomp,nphase,cv_nonods]) 
-    IF(IGOT_T2==1) THEN 
-       FEMT2 = reshape(FEMPSI( 1 + 4 * NL*ncomp : NL + 4 * NL*ncomp ),[1,nphase,cv_nonods]) 
-       FEMT2OLD = reshape(FEMPSI( 1 + (1+4*ncomp) * NL : NL + (1+4*ncomp)*NL),[1,nphase,cv_nonods]) 
-    ENDIF
+
+    DO CV_ILOC=1,CV_NONODS
+       FEMT(:,:,CV_ILOC)=reshape(PSI( 1 + (cv_iloc-1)*NTSOL: NPHASE*NCOMP+(cv_iloc-1)*NTSOL ),[ncomp,nphase])
+       FEMTOLD(:,:,CV_ILOC)=reshape(PSI(  1 +NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 2*NPHASE*NCOMP+(cv_iloc-1)*NTSOL ),[ncomp,nphase]) 
+       FEMDEN(:,:,CV_ILOC)=reshape(PSI(  1 +2*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 3*NPHASE*NCOMP+(cv_iloc-1)*NTSOL ),[ncomp,nphase]) 
+       FEMDENOLD(:,:,CV_ILOC)=reshape(PSI(  1 +3*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 4*NPHASE*NCOMP+(cv_iloc-1)*NTSOL ),[ncomp,nphase])  
+       IF(IGOT_T2==1) THEN
+          FEMT2(1,:,CV_ILOC)=PSI(  1 +4*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: NPHASE*(1+4*NCOMP)+(cv_iloc-1)*NTSOL )  
+          FEMT2OLD(1,:,CV_ILOC)=PSI(  1 +NPHASE*(1+4*NCOMP) + (cv_iloc-1)*NTSOL:cv_iloc*NTSOL ) 
+       ENDIF
+    end DO
+
 
     XC_CV( 1 : CV_NONODS ) = PSI_AVE(1:3*CV_NONODS:3)
     YC_CV( 1 : CV_NONODS ) = PSI_AVE(2:3*CV_NONODS:3)
@@ -4854,21 +4860,24 @@ END DO Loop_Elements
     NTSOL_INT = 1
 
     NL=CV_NONODS*NPHASE
-    PSI( 1 + 0 * ncomp* NL :     ncomp * NL  )  =    [  T  ]  
-    PSI( 1 + 1 * ncomp* NL : 2 * ncomp * NL )  =    [ DEN ] 
-    IF(IGOT_T2==1) THEN
-       PSI( 1 + 2 * ncomp * NL : NL + 2 * ncomp * NL )  =     [ T2 ]  
-    ENDIF
+    DO CV_ILOC=1,CV_NONODS
+       PSI( 1 + (cv_iloc-1)*NTSOL: NPHASE*NCOMP+(cv_iloc-1)*NTSOL )  =      [ T(:,:,CV_ILOC) ] 
+       PSI(  1 +1*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 2*NPHASE*NCOMP+(cv_iloc-1)*NTSOL )  =    [ DEN(:,:,CV_ILOC) ]
+       IF(IGOT_T2==1) THEN
+          PSI(  1 +2*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: NPHASE*(1+2*NCOMP)+(cv_iloc-1)*NTSOL )  =     [ T2(:,:,CV_ILOC) ] 
+       ENDIF
+    end DO
 
     DO ELE=1,TOTELE
        DO CV_ILOC=1,CV_NLOC
           X_INOD = X_NDGLN((ELE-1)*X_NLOC +CV_ILOC)
           CV_INOD=CV_NDGLN((ELE-1)*CV_NLOC+CV_ILOC)
-          PSI_AVE(CV_INOD)            =X(X_INOD)
-          PSI_AVE(CV_INOD+CV_NONODS)  =Y(X_INOD)
-          PSI_AVE(CV_INOD+2*CV_NONODS)=Z(X_INOD)
+          PSI_AVE(1+(CV_INOD-1)*3)=X(X_INOD)
+          PSI_AVE(2+(CV_INOD-1)*3)=Y(X_INOD)
+          PSI_AVE(3+(CV_INOD-1)*3)=Z(X_INOD)
        END DO
     END DO
+
     PSI_INT=1.0
 
     FEMPSI = PSI
@@ -4881,18 +4890,19 @@ END DO Loop_Elements
          IGETCT, MASS_MN_PRES, FINDCMC, COLCMC, NCOLCMC, PATH )
 
     NL=CV_NONODS*NPHASE
-    FEMT = reshape(FEMPSI( 1 + 0 * NL : ncomp* NL + 0 * NL ),&
-         [ncomp,nphase,cv_nonods])
-    FEMDEN = reshape(FEMPSI( 1 + 1 * ncomp * NL : NL*ncomp + 1 * ncomp * NL ),&
-         [ncomp,nphase,cv_nonods])
-    IF(IGOT_T2==1) THEN 
-       FEMT2  = reshape(FEMPSI( 1 + 2 * ncomp* NL : NL + 2*ncomp * NL ),&
-            [1,nphase,cv_nonods])
-    ENDIF
 
-    XC_CV( 1 : CV_NONODS ) = PSI_AVE( 1 : CV_NONODS )
-    YC_CV( 1 : CV_NONODS ) = PSI_AVE( 1 +CV_NONODS:   2*CV_NONODS )
-    ZC_CV( 1 : CV_NONODS ) = PSI_AVE( 1 +2*CV_NONODS: 3*CV_NONODS )
+    DO CV_ILOC=1,CV_NONODS
+       FEMT(:,:,CV_ILOC)=reshape(PSI( 1 + (cv_iloc-1)*NTSOL: NPHASE*NCOMP+(cv_iloc-1)*NTSOL ),[ncomp,nphase])
+       FEMDEN(:,:,CV_ILOC)=reshape(PSI(  1 +1*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: 2*NPHASE*NCOMP+(cv_iloc-1)*NTSOL ),[ncomp,nphase]) 
+       IF(IGOT_T2==1) THEN
+          FEMT2(1,:,CV_ILOC)=PSI(  1 +2*NPHASE*NCOMP + (cv_iloc-1)*NTSOL: NPHASE*(1+2*NCOMP)+(cv_iloc-1)*NTSOL )  
+       ENDIF
+    end DO
+
+
+    XC_CV( 1 : CV_NONODS ) = PSI_AVE(1:3*CV_NONODS:3)
+    YC_CV( 1 : CV_NONODS ) = PSI_AVE(2:3*CV_NONODS:3)
+    ZC_CV( 1 : CV_NONODS ) = PSI_AVE(3:3*CV_NONODS:3)
     MASS_CV( 1 : CV_NONODS ) = PSI_INT( 1 : CV_NONODS )
 
     DEALLOCATE( PSI )
