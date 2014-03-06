@@ -7953,8 +7953,8 @@ pure function mtolfun(value)
        DO CV_KLOC = 1, CV_NLOC
           CV_KLOC2 = CV_OTHER_LOC( CV_KLOC )
           IF(CV_KLOC2 /= 0 )THEN
-             DTDX_GI2 = DTDX_GI + SCVFEN( CV_KLOC, GI ) * DTX_ELE(:,:,:,CV_KLOC,ELE2)
-             DTOLDDX_GI2 = DTOLDDX_GI + SCVFEN( CV_KLOC, GI ) * DTOLDX_ELE(:,:,:,CV_KLOC,ELE2)
+             DTDX_GI2 = DTDX_GI2 + SCVFEN( CV_KLOC, GI ) * DTX_ELE(:,:,:,CV_KLOC,ELE2)
+             DTOLDDX_GI2 = DTOLDDX_GI2 + SCVFEN( CV_KLOC, GI ) * DTOLDX_ELE(:,:,:,CV_KLOC,ELE2)
           ENDIF
        END DO
        
